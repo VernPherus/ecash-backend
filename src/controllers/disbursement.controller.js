@@ -3,6 +3,8 @@ import { Status } from "../lib/constants.js";
 import { createLog } from "../lib/auditLogger.js";
 import { findActiveRecord } from "../lib/dbHelpter.js";
 import { genLDDAPCode } from "../lib/codeGenerator.js";
+import { calculateGross, calculateDeductions } from "../lib/formulas.js";
+import { io } from "../lib/socket.js";
 
 /**
  * * GENERATE LDDAP CODE: Generates LDDAP code for lddap entries
@@ -91,14 +93,10 @@ export const storeRec = async (req, res) => {
 
     //* Calculations
     // Sum up items for Gross Amount
-    const calculatedGross = items.reduce((sum, item) => {
-      return sum + Number(item.amount || 0);
-    }, 0);
+    const calculatedGross = calculateGross(items);
 
     // Sum up deductions
-    const calculatedDeductions = deductions.reduce((sum, ded) => {
-      return sum + Number(ded.amount || 0);
-    }, 0);
+    const calculatedDeductions = calculateDeductions(deductions);
 
     // Calculate net amount
     const calculatedNet = calculatedGross - calculatedDeductions;
@@ -175,7 +173,12 @@ export const storeRec = async (req, res) => {
         userId,
         `Created disbursement ${refId} for ${record.payee?.name} (Net: ${record.netAmount})`,
       );
+
+      return record;
     });
+
+    //* Socket.io implementation
+    io.emit("disbursement_updates", { type: "CREATE", data: newDisbursement });
 
     res.status(201).json(newDisbursement);
   } catch (error) {
@@ -279,6 +282,8 @@ export const displayRec = async (req, res) => {
           netAmount: true,
           status: true,
           method: true,
+          lddapNum: true,
+          checkNum: true,
 
           payee: {
             select: {
@@ -529,6 +534,9 @@ export const editRec = async (req, res) => {
       return record;
     });
 
+    // Socket.io
+    io.emit("disbusrement_updates", { type: "UPDATE", data: updatedRecord });
+
     res.status(200).json(updatedRecord);
   } catch (error) {
     console.log("Error in editRec controller: ", error.message);
@@ -603,6 +611,9 @@ export const approveRec = async (req, res) => {
       return approvedRecord;
     });
 
+    // Socket.io
+    io.emit("disbursement_updates", { type: "UPDATE", data: result });
+
     //* Return
     res.status(200).json({
       message: "Disbursement approved successfully.",
@@ -657,6 +668,9 @@ export const removeRec = async (req, res) => {
       const logDescription = `Deleted disbusrement #${id} (${recordToCheck.payee?.name || "Unknown Payee"})`;
       await createLog(tx, userId, logDescription);
     });
+
+    // Socket.io
+    io.emit("disbursement_updates", { type: "UPDATE" });
 
     res.status(200).json({
       message: "Disbursement record removed successfully.",

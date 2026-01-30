@@ -5,6 +5,7 @@ import {
   displayFund,
   displayFundDashboard,
   displayEntry,
+  displayFundStats,
   showFund,
   editFund,
   deactivateFund,
@@ -44,6 +45,12 @@ router.get(
   protectRoute,
   authorize(["USER", "STAFF", "ADMIN"]),
   displayEntry,
+);
+router.get(
+  "/displayStats",
+  protectRoute,
+  authorize(["USER", "STAFF", "ADMIN"]),
+  displayFundStats,
 );
 
 router.put(

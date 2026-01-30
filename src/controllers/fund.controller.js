@@ -1,6 +1,12 @@
 import { prisma } from "../lib/prisma.js";
 import { createLog } from "../lib/auditLogger.js";
 import { Reset, Status } from "../lib/constants.js";
+import {
+  totalDisb,
+  totalMonthBalance,
+  cashUtilization,
+  totalNCA,
+} from "../lib/formulas.js";
 
 /**
  * * NEW FUND: Create fund source
@@ -170,6 +176,35 @@ export const displayFund = async (req, res) => {
   } catch (error) {
     console.log("Error in displayFund controller: ", error.message);
     res.status(400).json({ message: "Internal server error." });
+  }
+};
+
+/**
+ * DISPLAY FUND STATS
+ * @param {*} params
+ */
+export const displayFundStats = async (req, res) => {
+  const { fundId, month } = req.body;
+
+  try {
+    if (!fundId || !month) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const totalEntries = await totalNCA(fundId, month);
+    const totalDisbursement = await totalDisb(fundId, month);
+    const totalMonthly = await totalMonthBalance(fundId, month);
+    const totalCashUtil = await cashUtilization(fundId, month);
+
+    res.status(200).json({
+      totalEntries: Number(totalEntries),
+      totalDisbursement,
+      totalMonthly,
+      totalCashUtil,
+    });
+  } catch (error) {
+    console.log("Error in the displayFundStats controller: ", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
 
