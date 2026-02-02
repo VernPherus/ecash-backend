@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
   binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
 }
 
@@ -45,6 +45,7 @@ model FundSource {
   deletedAt      DateTime?      @map("deleted_at")
   disbursements  Disbursement[]
   fundEntries    FundEntry[]
+  fundLedgers    FundLedger[]
 
   @@map("tb_fund_sources")
 }
@@ -60,6 +61,29 @@ model FundEntry {
   fundSource FundSource? @relation(fields: [fundSourceId], references: [id])
 
   @@map("tb_fund_entry")
+}
+
+model FundLedger {
+  id              Int      @id @default(autoincrement())
+  fundSourceId    Int      @map("fund_source_id")
+  year            Int
+  period          Int
+  startDate       DateTime @map("start_date")
+  endDate         DateTime @map("end_date")
+  startingBalance Decimal  @default(0) @map("starting_balance") @db.Decimal(15, 2)
+  totalEntry      Decimal  @default(0) @map("total_entry") @db.Decimal(15, 2)
+  totalDisbursed  Decimal  @default(0) @map("total_disbursed") @db.Decimal(15, 2)
+  endingBalance   Decimal  @default(0) @map("ending_balance") @db.Decimal(15, 2)
+
+  status LedgerStatus @default(OPEN)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  fundSource FundSource @relation(fields: [fundSourceId], references: [id])
+
+  @@unique([fundSourceId, year, period])
+  @@map("tb_fund_ledgers")
 }
 
 model References {
@@ -144,16 +168,17 @@ model DisbursementDeductions {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String?  @map("username")
-  firstName String   @map("first_name")
-  lastName  String   @map("last_name")
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  logs      Logs[]
+  id            Int            @id @default(autoincrement())
+  username      String?        @map("username")
+  firstName     String         @map("first_name")
+  lastName      String         @map("last_name")
+  email         String         @unique
+  password      String
+  role          Role           @default(USER)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  logs          Logs[]
+  notifications Notification[]
 
   @@map("tb_users")
 }
@@ -167,6 +192,29 @@ model Logs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("tb_logs")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String 
+  message   String 
+  type      NotifType @default(INFO) 
+  isRead    Boolean   @default(false) @map("is_read")
+  link      String? 
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead]) 
+  @@map("tb_notifications")
+}
+
+enum NotifType {
+  INFO 
+  WARNING 
+  SUCCESS 
+  ALERT 
 }
 
 enum Role {
@@ -200,4 +248,9 @@ enum Reset {
   YEARLY
   QUARTERLY
   NONE
+}
+
+enum LedgerStatus {
+  OPEN
+  CLOSED
 }
