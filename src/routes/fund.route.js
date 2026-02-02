@@ -46,7 +46,7 @@ router.get(
   authorize(["USER", "STAFF", "ADMIN"]),
   displayEntry,
 );
-router.get(
+router.post(
   "/displayStats",
   protectRoute,
   authorize(["USER", "STAFF", "ADMIN"]),

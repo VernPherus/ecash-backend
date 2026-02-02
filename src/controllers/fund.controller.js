@@ -180,27 +180,47 @@ export const displayFund = async (req, res) => {
 };
 
 /**
- * DISPLAY FUND STATS
+ * DISPLAY FUND STATS: Displays fund statistics on all funds
  * @param {*} params
  */
 export const displayFundStats = async (req, res) => {
-  const { fundId, month } = req.body;
+  const { month } = req.body;
 
   try {
-    if (!fundId || !month) {
-      return res.status(400).json({ message: "All fields required" });
+    if (!month) {
+      return res.status(400).json({ message: "Month field required" });
     }
 
-    const totalEntries = await totalNCA(fundId, month);
-    const totalDisbursement = await totalDisb(fundId, month);
-    const totalMonthly = await totalMonthBalance(fundId, month);
-    const totalCashUtil = await cashUtilization(fundId, month);
+    // Get all active funds
+    const fundIds = await prisma.fundSource.findMany({
+      where: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    // Store fundId and their statistics
+    const stats = await Promise.all(
+      fundIds.map(async (fund) => {
+        const totalEntries = await totalNCA(fund.id, month);
+        const totalDisbursement = await totalDisb(fund.id, month);
+        const totalMonthly = await totalMonthBalance(fund.id, month);
+        const totalCashUtil = await cashUtilization(fund.id, month);
+
+        return {
+          fundId: fund.id,
+          totalEntries,
+          totalDisbursement,
+          totalMonthly,
+          totalCashUtil,
+        };
+      }),
+    );
 
     res.status(200).json({
-      totalEntries: Number(totalEntries),
-      totalDisbursement,
-      totalMonthly,
-      totalCashUtil,
+      stats,
     });
   } catch (error) {
     console.log("Error in the displayFundStats controller: ", error);
