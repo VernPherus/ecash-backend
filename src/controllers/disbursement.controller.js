@@ -5,6 +5,7 @@ import { findActiveRecord } from "../lib/dbHelpter.js";
 import { genLDDAPCode } from "../lib/codeGenerator.js";
 import { calculateGross, calculateDeductions } from "../lib/formulas.js";
 import { io } from "../lib/socket.js";
+import { sendConfirmationEmail } from "../lib/mail.js";
 
 /**
  * * GENERATE LDDAP CODE: Generates LDDAP code for lddap entries
@@ -177,6 +178,42 @@ export const storeRec = async (req, res) => {
       return record;
     });
 
+    //* Send Confirmation email
+    if (newDisbursement.payee?.email) {
+      // Format currency for the email (Server-side formatting)
+      const formattedAmount = new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+      }).format(newDisbursement.netAmount);
+
+      // Format date
+      const formattedDate = newDisbursement.approvedAt
+        ? new Date(newDisbursement.approvedAt).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })
+        : new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+
+      // Determine Reference Number
+      const referenceNumber =
+        newDisbursement.lddapNum ||
+        newDisbursement.checkNum ||
+        `REF-${newDisbursement.id}`;
+
+      await sendConfirmationEmail(newDisbursement.payee.email, {
+        payeeName: newDisbursement.payee.name,
+        amount: formattedAmount,
+        referenceNumber: referenceNumber,
+        date: formattedDate,
+        purpose: newDisbursement.particulars || "Disbursement Payment",
+      });
+    }
+
     //* Socket.io implementation
     io.emit("disbursement_updates", { type: "CREATE", data: newDisbursement });
 
@@ -192,7 +229,6 @@ export const storeRec = async (req, res) => {
  * Shows disbursement date received, payee, fund, net amount, and status
  * Sample:
  * GET /api/disbursement/display?page=1&limit=10&search=acme&status=PENDING&startDate=2024-01-01
- * TODO: Add socket.io realtime functionality
  * @param {Object} req - Params for page and disbursement limit
  * @param {Object} res - Returns 10 disbursement records in json format
  * @returns
@@ -565,7 +601,7 @@ export const approveRec = async (req, res) => {
     const record = await prisma.disbursement.findUnique({
       where: { id: Number(id) },
       include: {
-        payee: { select: { name: true } },
+        payee: true, // Fetch full payee details to check for email later
         fundSource: { select: { code: true, name: true } },
       },
     });
@@ -589,7 +625,7 @@ export const approveRec = async (req, res) => {
           approvedAt: new Date(),
         },
         include: {
-          payee: { select: { name: true } },
+          payee: true, // Ensure we have the payee email in the result
           fundSource: { select: { code: true, name: true } },
           items: true,
           deductions: true,
@@ -610,6 +646,34 @@ export const approveRec = async (req, res) => {
 
       return approvedRecord;
     });
+
+    //* Send Confirmation email
+    // Check if payee has an email address
+    if (result.payee?.email) {
+      // Format Data
+      const formattedAmount = new Intl.NumberFormat("en-PH", {
+        style: "currency",
+        currency: "PHP",
+      }).format(result.netAmount);
+
+      const formattedDate = new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
+      const referenceNumber =
+        result.lddapNum || result.checkNum || `REF-${result.id}`;
+
+      // Send Email
+      await sendConfirmationEmail(result.payee.email, {
+        payeeName: result.payee.name,
+        amount: formattedAmount,
+        referenceNumber: referenceNumber,
+        date: formattedDate,
+        purpose: result.particulars || "Disbursement Payment",
+      });
+    }
 
     // Socket.io
     io.emit("disbursement_updates", { type: "UPDATE", data: result });

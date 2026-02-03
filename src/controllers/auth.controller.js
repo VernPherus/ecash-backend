@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/utils.js";
 import { Role } from "../lib/constants.js";
 import { sentOtpEmail } from "../lib/mail.js";
+import crypto from "crypto";
 
 /**
  ** SIGNUP: Create a user and store into database
