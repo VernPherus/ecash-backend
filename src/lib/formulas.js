@@ -177,3 +177,7 @@ export const cashUtilization = async (fundId, month) => {
   // Utilization is typically (Expenses / Allocation) * 100
   return (disb / nca) * 100;
 };
+
+export const getMonthlyTotal = async (params) => {
+  
+}

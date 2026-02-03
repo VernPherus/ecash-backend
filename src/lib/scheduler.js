@@ -127,7 +127,7 @@ const createMonthlyLedgers = async () => {
   }
 
   if (createdCount > 0) {
-    console.log(`📚 Created ${createdCount} new monthly ledgers.`);
+    console.log(`Created ${createdCount} new monthly ledgers.`);
   }
 };
 
