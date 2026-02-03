@@ -101,13 +101,13 @@ export const totalNCA = async (fundId, input) => {
   const entriesAgg = await prisma.fundEntry.aggregate({
     _sum: { amount: true },
     where: {
-      id: fundId,
+      fundSourceId: fundId,
       createdAt: { gte: startDate, lte: endDate },
       deletedAt: null,
     },
   });
 
-  // Sum New Fund Sources Initial Balances (if they count as NCA for that month)
+  // Initial amount
   const fundsAgg = await prisma.fundSource.aggregate({
     _sum: { initialBalance: true },
     where: {
@@ -119,9 +119,10 @@ export const totalNCA = async (fundId, input) => {
   });
 
   const totalEntries = Number(entriesAgg._sum.amount || 0);
-  const totalInitials = Number(fundsAgg._sum.initialBalance || 0);
+  const initialAmount = Number(fundsAgg._sum.initialBalance || 0);
+  console.log(initialAmount);
 
-  return totalEntries + totalInitials;
+  return totalEntries + initialAmount;
 };
 
 /**
@@ -140,9 +141,9 @@ export const totalDisb = async (fundId, month) => {
   const aggregations = await prisma.disbursement.aggregate({
     _sum: { netAmount: true },
     where: {
-      id: fundId,
-      dateReceived: { gte: startDate, lte: endDate }, // Using dateReceived for financial reporting
-      status: "PAID", // Only count actual spent money
+      fundSourceId: fundId,
+      dateReceived: { gte: startDate, lte: endDate },
+      status: "PAID",
       deletedAt: null,
     },
   });
@@ -174,10 +175,6 @@ export const cashUtilization = async (fundId, month) => {
 
   if (nca === 0) return 0; // Prevent division by zero
 
-  // Utilization is typically (Expenses / Allocation) * 100
-  return (disb / nca) * 100;
+  const utilization = (disb / nca) * 100;
+  return Number(utilization.toFixed(2));
 };
-
-export const getMonthlyTotal = async (params) => {
-  
-}
