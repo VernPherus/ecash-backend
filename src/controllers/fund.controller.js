@@ -7,6 +7,7 @@ import {
   cashUtilization,
   totalNCA,
 } from "../lib/formulas.js";
+import { getSystemTimeDetails } from "../lib/time.js";
 
 /**
  * * NEW FUND: Create fund source
@@ -415,9 +416,11 @@ export const resetFund = async (req, res) => {
   try {
     const today = new Date();
 
+    const currentTime = getSystemTimeDetails();
+
     // Determine date conditions
-    const isFirstDayOfMonth = today.getDate() === 1;
-    const isFirstDayOfYear = isFirstDayOfMonth && today.getMonth() === 0;
+    const isFirstDayOfMonth = currentTime.isStartOfMonth;
+    const isFirstDayOfYear = currentTime.isStartofYear;
 
     // Update
     const result = await prisma.$transaction(async (tx) => {
