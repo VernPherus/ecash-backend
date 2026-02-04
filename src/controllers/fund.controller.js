@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { createLog } from "../lib/auditLogger.js";
-import { Reset, Status } from "../lib/constants.js";
+import { LedgerStatus, Reset, Status } from "../lib/constants.js";
 import {
   totalDisb,
   totalMonthBalance,
@@ -10,7 +10,7 @@ import {
 import { getSystemTimeDetails } from "../lib/time.js";
 
 /**
- * * NEW FUND: Create fund source
+ * * NEW FUND: Create fund source and initializes the fund ledger
  * @param {object} req
  * @param {object} res
  * @returns
@@ -49,11 +49,32 @@ export const newFund = async (req, res) => {
         },
       });
 
+      // Dates for ledger
+      const { year, month } = getSystemTimeDetails();
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0);
+
+      // Create initial ledger
+      await tx.fundLedger.create({
+        data: {
+          fundSourceId: fund.id,
+          year: year,
+          period: month,
+          startDate: startDate,
+          endDate: endDate,
+          startingBalance: fund.initialBalance,
+          endingBalance: fund.initialBalance,
+          totalEntry: 0,
+          totalDisbursed: 0,
+          status: LedgerStatus.OPEN,
+        },
+      });
+
       // Create log
       await createLog(
         tx,
         userId,
-        `Create new Fund Source: ${fund.code} - ${fund.name}`,
+        `Create new Fund Source: ${fund.code} - ${fund.name} with initial ledger`,
       );
 
       return fund;
@@ -520,6 +541,40 @@ export const editFund = async (req, res) => {
           reset: reset || undefined,
         },
       });
+
+      // Sync ledger
+      if (initialBalance !== undefined) {
+        const { year, month } = getSystemTimeDetails();
+
+        // Find the ledger for the current period
+        const currentLedger = await tx.fundLedger.findUnique({
+          where: {
+            fundSourceId_year_period: {
+              fundSourceId: Number(id),
+              year: year,
+              period: month,
+            },
+          },
+        });
+
+        // If a ledger exists for this month, update it to reflect the new initial balance
+        if (currentLedger) {
+          const newStarting = Number(initialBalance);
+          // Recalculate Ending Balance: Starting + Income - Expenses
+          const newEnding =
+            newStarting +
+            Number(currentLedger.totalEntry) -
+            Number(currentLedger.totalDisbursed);
+
+          await tx.fundLedger.update({
+            where: { id: currentLedger.id },
+            data: {
+              startingBalance: newStarting,
+              endingBalance: newEnding,
+            },
+          });
+        }
+      }
 
       // Create Log
       const changeNote =
