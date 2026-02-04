@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { createLog } from "./auditLogger.js";
 import { notifyRoles } from "./notification.js";
 import { getActiveResetTargets, getSystemTimeDetails } from "./time.js";
-import { totalMonthBalance } from "./formulas.js";
+import { totalMonthBalance, totalNCA } from "./formulas.js";
 
 /**
  * * AUTOMATION SCHEDULER
@@ -52,10 +52,10 @@ const performFundReset = async () => {
   });
 
   if (fundsToReset.length > 0) {
-    // Deactivate/Reset funds
+    //RESET:  Take monthly total and carry over to initial amount
     await prisma.fundSource.updateMany({
       where: { id: { in: fundsToReset.map((f) => f.id) } },
-      data: { initialBalance: 0, isActive: false }, // Or however you define "reset"
+      data: { initialBalance: 0 }, 
     });
 
     // Log it as System
@@ -145,5 +145,5 @@ const sendAuditNotification = async () => {
     "Monthly maintenance complete. Ledgers created and funds reset where applicable.",
     "INFO",
   );
-  console.log("🔔 Sent monthly audit notifications.");
+  console.log(" Sent monthly audit notifications.");
 };

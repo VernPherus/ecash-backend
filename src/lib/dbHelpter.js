@@ -17,7 +17,7 @@ export const findActiveRecord = async (id, include = {}) => {
 };
 
 /**
- *
+ * * Gets the latest series for code generation
  */
 export const getCurrentSeries = async () => {
   const latestDisbursement = await prisma.disbursement.findFirst({
