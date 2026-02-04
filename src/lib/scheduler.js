@@ -37,11 +37,11 @@ export const initScheduler = () => {
 
 /**
  * AUTOMATIC FUND RESET
- * @returns
+ * Resets funds based on their reset schedule (MONTHLY, QUARTERLY, YEARLY)
+ * Each fund is reset individually with its own calculated balance
  */
 const performFundReset = async () => {
-  const targets = getActiveResetTargets(); // Returns ["MONTHLY", "QUARTERLY", etc.] based on date
-
+  const targets = getActiveResetTargets();
   if (targets.length === 0) return;
 
   const fundsToReset = await prisma.fundSource.findMany({
@@ -51,83 +51,181 @@ const performFundReset = async () => {
     },
   });
 
-  if (fundsToReset.length > 0) {
-    //RESET:  Take monthly total and carry over to initial amount
-    await prisma.fundSource.updateMany({
-      where: { id: { in: fundsToReset.map((f) => f.id) } },
-      data: { initialBalance: 0 }, 
-    });
+  if (fundsToReset.length === 0) {
+    console.log("No funds to reset.");
+    return;
+  }
 
-    // Log it as System
-    await prisma.logs.create({
-      data: {
-        userId: 1, // Assuming ID 1 is Super Admin, or create a specific SYSTEM user
-        log: `SYSTEM AUTO-RESET: Reset ${fundsToReset.length} funds (${targets.join(", ")})`,
-      },
-    });
+  let successCount = 0;
+  const errors = [];
 
-    console.log(`🔄 Reset ${fundsToReset.length} funds.`);
+  // Process each fund individually with transaction safety
+  for (const fund of fundsToReset) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Calculate carry-over balance for this specific fund
+        const carryOverBalance = await totalMonthBalance(fund.id);
+
+        // Validate the balance is a valid number
+        if (
+          carryOverBalance === null ||
+          carryOverBalance === undefined ||
+          isNaN(Number(carryOverBalance))
+        ) {
+          throw new Error(
+            `Invalid carry-over balance for fund ${fund.code}: ${carryOverBalance}`,
+          );
+        }
+
+        // Update the fund's initial balance
+        await tx.fundSource.update({
+          where: { id: fund.id },
+          data: { initialBalance: carryOverBalance },
+        });
+
+        // Log individual fund reset
+        await tx.logs.create({
+          data: {
+            userId: 1, // System user
+            log: `SYSTEM AUTO-RESET: Fund ${fund.code} reset to ${carryOverBalance}`,
+          },
+        });
+      });
+
+      successCount++;
+      console.log(`✅ Reset fund ${fund.code}`);
+    } catch (error) {
+      console.error(`❌ Failed to reset fund ${fund.code}:`, error);
+      errors.push({
+        fundId: fund.id,
+        fundCode: fund.code,
+        error: error.message,
+      });
+    }
+  }
+
+  // Log summary results
+  await prisma.logs.create({
+    data: {
+      userId: 1,
+      log: `SYSTEM AUTO-RESET: Reset ${successCount}/${fundsToReset.length} funds (${targets.join(", ")})${errors.length > 0 ? ` - ${errors.length} failures` : ""}`,
+    },
+  });
+
+  console.log(`🔄 Reset ${successCount}/${fundsToReset.length} funds.`);
+
+  if (errors.length > 0) {
+    console.error("Reset errors:", errors);
+    // Optionally notify admins about failures
+    await notifyRoles(
+      ["ADMIN"],
+      "Fund Reset Failures",
+      `${errors.length} fund(s) failed to reset. Check logs for details.`,
+      "ALERT",
+    );
   }
 };
 
 /**
  * AUTOMATIC LEDGER CREATION
+ * Creates monthly ledgers for all active funds
+ * Carries over previous ending balance or uses initial balance
  */
 const createMonthlyLedgers = async () => {
   const { year, month } = getSystemTimeDetails();
 
-  // Get all active funds that aren't pending reset
+  // Get all active funds
   const activeFunds = await prisma.fundSource.findMany({
     where: { isActive: true },
   });
 
+  if (activeFunds.length === 0) {
+    console.log("No active funds found.");
+    return;
+  }
+
   let createdCount = 0;
+  const errors = [];
 
   for (const fund of activeFunds) {
-    // Check if ledger exists
-    const exists = await prisma.fundLedger.findUnique({
-      where: {
-        fundSourceId_year_period: {
-          fundSourceId: fund.id,
-          year: year,
-          period: month,
-        },
-      },
-    });
-
-    if (!exists) {
-      // Calculate start/end of month
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0); // Last day of month
-
-      // Get previous ledger's ending balance to carry over
-      const prevLedger = await prisma.fundLedger.findFirst({
-        where: { fundSourceId: fund.id },
-        orderBy: [{ year: "desc" }, { period: "desc" }],
-      });
-
-      const startingBalance = prevLedger
-        ? prevLedger.endingBalance
-        : fund.initialBalance;
-
-      await prisma.fundLedger.create({
-        data: {
-          fundSourceId: fund.id,
-          year,
-          period: month,
-          startDate,
-          endDate,
-          startingBalance,
-          endingBalance: startingBalance,
-          status: "OPEN",
+    try {
+      // Check if ledger already exists
+      const exists = await prisma.fundLedger.findUnique({
+        where: {
+          fundSourceId_year_period: {
+            fundSourceId: fund.id,
+            year: year,
+            period: month,
+          },
         },
       });
-      createdCount++;
+
+      if (!exists) {
+        await prisma.$transaction(async (tx) => {
+          // Calculate start/end of month
+          const startDate = new Date(year, month - 1, 1);
+          const endDate = new Date(year, month, 0); // Last day of month
+
+          // Get previous ledger's ending balance to carry over
+          const prevLedger = await tx.fundLedger.findFirst({
+            where: { fundSourceId: fund.id },
+            orderBy: [{ year: "desc" }, { period: "desc" }],
+          });
+
+          // Use previous ending balance or fall back to initial balance, default to 0
+          const startingBalance =
+            prevLedger?.endingBalance ?? fund.initialBalance ?? 0;
+
+          // Validate starting balance
+          if (isNaN(Number(startingBalance))) {
+            throw new Error(
+              `Invalid starting balance for fund ${fund.code}: ${startingBalance}`,
+            );
+          }
+
+          // Create the ledger
+          await tx.fundLedger.create({
+            data: {
+              fundSourceId: fund.id,
+              year,
+              period: month,
+              startDate,
+              endDate,
+              startingBalance,
+              endingBalance: startingBalance,
+              status: "OPEN",
+            },
+          });
+        });
+
+        createdCount++;
+        console.log(`✅ Created ledger for fund ${fund.code}`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to create ledger for fund ${fund.code}:`, error);
+      errors.push({
+        fundId: fund.id,
+        fundCode: fund.code,
+        error: error.message,
+      });
     }
   }
 
   if (createdCount > 0) {
-    console.log(`Created ${createdCount} new monthly ledgers.`);
+    console.log(`📊 Created ${createdCount} new monthly ledgers.`);
+  } else {
+    console.log("All ledgers already exist for this period.");
+  }
+
+  if (errors.length > 0) {
+    console.error("Ledger creation errors:", errors);
+    // Optionally notify admins about failures
+    await notifyRoles(
+      ["ADMIN"],
+      "Ledger Creation Failures",
+      `${errors.length} ledger(s) failed to create. Check logs for details.`,
+      "ALERT",
+    );
   }
 };
 
@@ -145,5 +243,5 @@ const sendAuditNotification = async () => {
     "Monthly maintenance complete. Ledgers created and funds reset where applicable.",
     "INFO",
   );
-  console.log(" Sent monthly audit notifications.");
+  console.log("📧 Sent monthly audit notifications.");
 };
