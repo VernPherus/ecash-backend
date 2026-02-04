@@ -14,6 +14,7 @@ import ledgerRoutes from "./routes/ledger.route.js";
 import notifRoutes from "./routes/notification.route.js";
 
 import { app, server } from "./lib/socket.js";
+import { initScheduler } from "./lib/scheduler.js";
 
 dotenv.config();
 
@@ -45,6 +46,9 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/notif", notifRoutes);
+
+//* Start Scheduler
+initScheduler();
 
 server.listen(PORT, () => {
   console.log("server is running on port: " + PORT);
