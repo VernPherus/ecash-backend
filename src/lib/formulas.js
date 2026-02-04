@@ -120,7 +120,6 @@ export const totalNCA = async (fundId, input) => {
 
   const totalEntries = Number(entriesAgg._sum.amount || 0);
   const initialAmount = Number(fundsAgg._sum.initialBalance || 0);
-  console.log(initialAmount);
 
   return totalEntries + initialAmount;
 };

@@ -179,6 +179,66 @@ async function main() {
   const funds = [fund1, fund2];
   console.log("Fund Sources created/updated.");
 
+  //* --- Create Initial Ledgers for Each Fund ---
+  console.log("Creating initial ledgers...");
+
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1; // JavaScript months are 0-indexed
+
+  // Calculate start and end dates for current month
+  const ledgerStartDate = new Date(currentYear, currentMonth - 1, 1);
+  const ledgerEndDate = new Date(currentYear, currentMonth, 0); // Last day of current month
+
+  let ledgersCreated = 0;
+
+  for (const fund of funds) {
+    try {
+      // Check if ledger already exists for this fund/year/period
+      const existingLedger = await prisma.fundLedger.findUnique({
+        where: {
+          fundSourceId_year_period: {
+            fundSourceId: fund.id,
+            year: currentYear,
+            period: currentMonth,
+          },
+        },
+      });
+
+      if (!existingLedger) {
+        await prisma.fundLedger.create({
+          data: {
+            fundSourceId: fund.id,
+            year: currentYear,
+            period: currentMonth,
+            startDate: ledgerStartDate,
+            endDate: ledgerEndDate,
+            startingBalance: fund.initialBalance,
+            endingBalance: fund.initialBalance,
+            totalEntry: 0,
+            totalDisbursed: 0,
+            status: "OPEN",
+          },
+        });
+        ledgersCreated++;
+        console.log(
+          `  ✓ Created ledger for ${fund.code} (${currentYear}-${String(currentMonth).padStart(2, "0")})`,
+        );
+      } else {
+        console.log(
+          `  ⊘ Ledger already exists for ${fund.code} (${currentYear}-${String(currentMonth).padStart(2, "0")})`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `  ✗ Failed to create ledger for ${fund.code}:`,
+        error.message,
+      );
+    }
+  }
+
+  console.log(`Created ${ledgersCreated} initial ledger(s).`);
+
   //* --- Create Payees ---
   const payeesData = [
     {
@@ -374,6 +434,7 @@ async function main() {
   console.log(`   System User ID: ${systemUser.id}`);
   console.log(`   Total Users: 4`);
   console.log(`   Total Funds: ${funds.length}`);
+  console.log(`   Total Ledgers: ${ledgersCreated}`);
   console.log(`   Total Payees: ${payees.length}`);
   console.log(`   Total Disbursements: ${lddapCreated + checkCreated}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
