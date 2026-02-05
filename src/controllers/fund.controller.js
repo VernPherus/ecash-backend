@@ -1,9 +1,16 @@
 import { prisma } from "../lib/prisma.js";
 import { createLog } from "../lib/auditLogger.js";
-import { Reset, Status } from "../lib/constants.js";
+import { LedgerStatus, Reset, Status } from "../lib/constants.js";
+import {
+  totalDisb,
+  totalMonthBalance,
+  cashUtilization,
+  totalNCA,
+} from "../lib/formulas.js";
+import { getSystemTimeDetails } from "../lib/time.js";
 
 /**
- * * NEW FUND: Create fund source
+ * * NEW FUND: Create fund source and initializes the fund ledger
  * @param {object} req
  * @param {object} res
  * @returns
@@ -42,11 +49,32 @@ export const newFund = async (req, res) => {
         },
       });
 
+      // Dates for ledger
+      const { year, month } = getSystemTimeDetails();
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0);
+
+      // Create initial ledger
+      await tx.fundLedger.create({
+        data: {
+          fundSourceId: fund.id,
+          year: year,
+          period: month,
+          startDate: startDate,
+          endDate: endDate,
+          startingBalance: fund.initialBalance,
+          endingBalance: fund.initialBalance,
+          totalEntry: 0,
+          totalDisbursed: 0,
+          status: LedgerStatus.OPEN,
+        },
+      });
+
       // Create log
       await createLog(
         tx,
         userId,
-        `Create new Fund Source: ${fund.code} - ${fund.name}`,
+        `Create new Fund Source: ${fund.code} - ${fund.name} with initial ledger`,
       );
 
       return fund;
@@ -170,6 +198,55 @@ export const displayFund = async (req, res) => {
   } catch (error) {
     console.log("Error in displayFund controller: ", error.message);
     res.status(400).json({ message: "Internal server error." });
+  }
+};
+
+/**
+ * DISPLAY FUND STATS: Displays fund statistics on all funds
+ * @param {*} params
+ */
+export const displayFundStats = async (req, res) => {
+  const { month } = req.body;
+
+  try {
+    if (!month) {
+      return res.status(400).json({ message: "Month field required" });
+    }
+
+    // Get all active funds
+    const fundIds = await prisma.fundSource.findMany({
+      where: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    // Store fundId and their statistics
+    const stats = await Promise.all(
+      fundIds.map(async (fund) => {
+        const totalEntries = await totalNCA(fund.id, month);
+        const totalDisbursement = await totalDisb(fund.id, month);
+        const totalMonthly = await totalMonthBalance(fund.id, month);
+        const totalCashUtil = await cashUtilization(fund.id, month);
+
+        return {
+          fundId: fund.id,
+          totalEntries,
+          totalDisbursement,
+          totalMonthly,
+          totalCashUtil,
+        };
+      }),
+    );
+
+    res.status(200).json({
+      stats,
+    });
+  } catch (error) {
+    console.log("Error in the displayFundStats controller: ", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
 
@@ -299,18 +376,18 @@ export const showFund = async (req, res) => {
 
   try {
     // Fetch fund entries with paid disbursements
-    const fund = await prisma.fund.findUnique({
+    const fund = await prisma.fundSource.findUnique({
       where: {
         id: Number(fundID),
       },
       include: {
         fundEntries: true,
-        disbursement: {
+        disbursements: {
           where: { status: Status.PAID },
           select: { netAmount: true },
         },
         _count: {
-          select: { disbursement: true },
+          select: { disbursements: true },
         },
       },
     });
@@ -360,9 +437,11 @@ export const resetFund = async (req, res) => {
   try {
     const today = new Date();
 
+    const currentTime = getSystemTimeDetails();
+
     // Determine date conditions
-    const isFirstDayOfMonth = today.getDate() === 1;
-    const isFirstDayOfYear = isFirstDayOfMonth && today.getMonth() === 0;
+    const isFirstDayOfMonth = currentTime.isStartOfMonth;
+    const isFirstDayOfYear = currentTime.isStartofYear;
 
     // Update
     const result = await prisma.$transaction(async (tx) => {
@@ -462,6 +541,40 @@ export const editFund = async (req, res) => {
           reset: reset || undefined,
         },
       });
+
+      // Sync ledger
+      if (initialBalance !== undefined) {
+        const { year, month } = getSystemTimeDetails();
+
+        // Find the ledger for the current period
+        const currentLedger = await tx.fundLedger.findUnique({
+          where: {
+            fundSourceId_year_period: {
+              fundSourceId: Number(id),
+              year: year,
+              period: month,
+            },
+          },
+        });
+
+        // If a ledger exists for this month, update it to reflect the new initial balance
+        if (currentLedger) {
+          const newStarting = Number(initialBalance);
+          // Recalculate Ending Balance: Starting + Income - Expenses
+          const newEnding =
+            newStarting +
+            Number(currentLedger.totalEntry) -
+            Number(currentLedger.totalDisbursed);
+
+          await tx.fundLedger.update({
+            where: { id: currentLedger.id },
+            data: {
+              startingBalance: newStarting,
+              endingBalance: newEnding,
+            },
+          });
+        }
+      }
 
       // Create Log
       const changeNote =

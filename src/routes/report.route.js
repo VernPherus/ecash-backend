@@ -1,10 +1,23 @@
 import express from "express";
 import { protectRoute, authorize } from "../middleware/auth.middleware.js";
-import { generateSPV } from "../controllers/report.controller.js";
+import {
+  generateDebitReport,
+  generateCheckReport,
+} from "../controllers/report.controller.js";
 
 const router = express.Router();
 
-// Allow STAFF and ADMIN to generate reports
-router.get("/spv", protectRoute, authorize(["STAFF", "ADMIN"]), generateSPV);
+router.get(
+  "/debit",
+  protectRoute,
+  authorize(["USER", "STAFF", "ADMIN"]),
+  generateDebitReport,
+);
+router.get(
+  "/check",
+  protectRoute,
+  authorize(["USER", "STAFF", "ADMIN"]),
+  generateCheckReport,
+);
 
 export default router;

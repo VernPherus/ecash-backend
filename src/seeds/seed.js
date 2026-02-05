@@ -40,9 +40,38 @@ async function main() {
   //* --- Create Users ---
   const passwordHash = await bcrypt.hash("password123", 10);
 
+  // Default System User for Automated Logs
+  // Using raw SQL to ensure id = 1 for scheduler compatibility
+  await prisma.$executeRaw`
+    INSERT INTO tb_users (id, username, first_name, last_name, email, password, role, created_at, updated_at)
+    VALUES (1, 'system_internal', 'System', 'Internal', 'system@fundwatch.com', ${passwordHash}, 'ADMIN', NOW(), NOW())
+    ON CONFLICT (email) DO UPDATE 
+    SET username = EXCLUDED.username,
+        first_name = EXCLUDED.first_name,
+        last_name = EXCLUDED.last_name,
+        role = EXCLUDED.role,
+        updated_at = NOW()
+  `;
+
+  const systemUser = await prisma.user.findUnique({
+    where: { email: "system@fundwatch.com" },
+  });
+
+  console.log(`System user created/updated with ID: ${systemUser.id}`);
+
+  // Reset sequence to ensure next auto-generated ID is > 1
+  await prisma.$executeRaw`
+    SELECT setval(pg_get_serial_sequence('tb_users', 'id'), GREATEST(1, (SELECT MAX(id) FROM tb_users)))
+  `;
+
   const admin = await prisma.user.upsert({
     where: { email: "admin@fundwatch.com" },
-    update: {},
+    update: {
+      username: "admin_user",
+      firstName: "Super",
+      lastName: "Admin",
+      role: Role.ADMIN,
+    },
     create: {
       username: "admin_user",
       firstName: "Super",
@@ -55,7 +84,12 @@ async function main() {
 
   const staff = await prisma.user.upsert({
     where: { email: "approver@fundwatch.com" },
-    update: {},
+    update: {
+      username: "approver_staff",
+      firstName: "Finance",
+      lastName: "Manager",
+      role: Role.STAFF,
+    },
     create: {
       username: "approver_staff",
       firstName: "Finance",
@@ -68,7 +102,12 @@ async function main() {
 
   const encoder = await prisma.user.upsert({
     where: { email: "encoder@fundwatch.com" },
-    update: {},
+    update: {
+      username: "encoder_user",
+      firstName: "User",
+      lastName: "View",
+      role: Role.USER,
+    },
     create: {
       username: "encoder_user",
       firstName: "User",
@@ -79,12 +118,17 @@ async function main() {
     },
   });
 
-  console.log("Users created.");
+  console.log("Users created including default System user.");
 
   //* --- Create Fund Sources ---
   const fund1 = await prisma.fundSource.upsert({
     where: { code: "GF-101" },
-    update: {},
+    update: {
+      name: "Regular Agency Fund",
+      description: "General Fund for regular agency operations (PS & MODE)",
+      initialBalance: 5000000.0,
+      reset: Reset.NONE,
+    },
     create: {
       code: "GF-101",
       name: "Regular Agency Fund",
@@ -96,26 +140,104 @@ async function main() {
 
   const fund2 = await prisma.fundSource.upsert({
     where: { code: "F-184" },
-    update: {},
+    update: {
+      name: "MDS Trust Fund",
+      initialBalance: 1500000.0,
+      reset: Reset.MONTHLY,
+    },
     create: {
       code: "F-184",
       name: "MDS Trust Fund",
       initialBalance: 1500000.0,
       reset: Reset.MONTHLY,
-      fundEntries: {
-        create: [
-          {
-            name: "NCA - 101",
-            amount: 3000000.0,
-          },
-          { name: "NCA - 102", amount: 2000000.0 },
-        ],
-      },
     },
   });
 
+  // Handle fund entries separately to work with upsert
+  const existingEntries = await prisma.fundEntry.findMany({
+    where: { fundSourceId: fund2.id },
+  });
+
+  if (existingEntries.length === 0) {
+    await prisma.fundEntry.createMany({
+      data: [
+        {
+          fundSourceId: fund2.id,
+          name: "NCA - 101",
+          amount: 3000000.0,
+        },
+        {
+          fundSourceId: fund2.id,
+          name: "NCA - 102",
+          amount: 2000000.0,
+        },
+      ],
+    });
+    console.log("Fund entries created for MDS Trust Fund.");
+  }
+
   const funds = [fund1, fund2];
-  console.log("Fund Sources created.");
+  console.log("Fund Sources created/updated.");
+
+  //* --- Create Initial Ledgers for Each Fund ---
+  console.log("Creating initial ledgers...");
+
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1; // JavaScript months are 0-indexed
+
+  // Calculate start and end dates for current month
+  const ledgerStartDate = new Date(currentYear, currentMonth - 1, 1);
+  const ledgerEndDate = new Date(currentYear, currentMonth, 0); // Last day of current month
+
+  let ledgersCreated = 0;
+
+  for (const fund of funds) {
+    try {
+      // Check if ledger already exists for this fund/year/period
+      const existingLedger = await prisma.fundLedger.findUnique({
+        where: {
+          fundSourceId_year_period: {
+            fundSourceId: fund.id,
+            year: currentYear,
+            period: currentMonth,
+          },
+        },
+      });
+
+      if (!existingLedger) {
+        await prisma.fundLedger.create({
+          data: {
+            fundSourceId: fund.id,
+            year: currentYear,
+            period: currentMonth,
+            startDate: ledgerStartDate,
+            endDate: ledgerEndDate,
+            startingBalance: fund.initialBalance,
+            endingBalance: fund.initialBalance,
+            totalEntry: 0,
+            totalDisbursed: 0,
+            status: "OPEN",
+          },
+        });
+        ledgersCreated++;
+        console.log(
+          `  ✓ Created ledger for ${fund.code} (${currentYear}-${String(currentMonth).padStart(2, "0")})`,
+        );
+      } else {
+        console.log(
+          `  ⊘ Ledger already exists for ${fund.code} (${currentYear}-${String(currentMonth).padStart(2, "0")})`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `  ✗ Failed to create ledger for ${fund.code}:`,
+        error.message,
+      );
+    }
+  }
+
+  console.log(`Created ${ledgersCreated} initial ledger(s).`);
 
   //* --- Create Payees ---
   const payeesData = [
@@ -154,7 +276,6 @@ async function main() {
 
   const payees = [];
   for (const p of payeesData) {
-    // Check if exists first to avoid duplicates on re-seed
     const existing = await prisma.payee.findFirst({ where: { name: p.name } });
     if (!existing) {
       const payee = await prisma.payee.create({ data: p });
@@ -167,160 +288,156 @@ async function main() {
   console.log("Payees created.");
 
   //* Create Disbursements
-  // Clean up old disbursements first to avoid clutter during dev
-  // await prisma.disbursement.deleteMany({});
-
   const today = new Date();
   const thisMonth = new Date();
   thisMonth.setDate(1);
 
+  let lddapCreated = 0;
+  let lddapFailed = 0;
+
   // --- LDDAP Method (10 Items) ---
-  console.log("Generating 10 LDDAP Disbursements...");
-
+  console.log("Creating LDDAP disbursements...");
   for (let i = 1; i <= 10; i++) {
-    const randomFund = funds[getRandomInt(0, funds.length - 1)];
-    const randomPayee = payees[getRandomInt(0, payees.length - 1)];
-    const randomDate = getRandomDate(thisMonth, today);
+    try {
+      const randomFund = funds[getRandomInt(0, funds.length - 1)];
+      const randomPayee = payees[getRandomInt(0, payees.length - 1)];
+      const randomDate = getRandomDate(thisMonth, today);
 
-    // Financials
-    const gross = getRandomInt(10000, 50000);
-    const tax = gross * 0.05;
-    const net = gross - tax;
+      const gross = getRandomInt(10000, 50000);
+      const tax = gross * 0.05;
+      const net = gross - tax;
 
-    // Variation: 50% Online, 50% Manual
-    const isOnline = i % 2 === 0;
-    const lddapMethod = isOnline ? LddapMethod.ONLINE : LddapMethod.MANUAL;
+      const isOnline = i % 2 === 0;
+      const lddapMethod = isOnline ? LddapMethod.ONLINE : LddapMethod.MANUAL;
 
-    const isPaid = true;
-    const status = isPaid ? Status.PAID : Status.PENDING;
-
-    await prisma.disbursement.create({
-      data: {
-        payeeId: randomPayee.id,
-        fundSourceId: randomFund.id,
-
-        // --- LDDAP Specific Fields ---
-        method: Method.LDDAP,
-        lddapMthd: lddapMethod,
-        lddapNum: genCode("LDDAP"),
-        checkNum: null, // No check num for LDDAP
-
-        // --- Common Fields ---
-        dateReceived: randomDate,
-        dateEntered: new Date(),
-        grossAmount: gross,
-        totalDeductions: tax,
-        netAmount: net,
-        particulars: `Payment for services (LDDAP ${lddapMethod}) - Batch ${i}`,
-        status: status,
-        approvedAt: isPaid ? new Date() : null,
-
-        // --- Relations: References (New Schema) ---
-        references: {
-          create: {
-            acicNum: genCode("ACIC"),
-            orsNum: genCode("ORS"),
-            dvNum: genCode("DV"),
-            uacsCode: `5-02-${getRandomInt(10, 99)}-${getRandomInt(100, 999)}`,
-            respCode: `19-001-03-${getRandomInt(100, 999)}`,
+      await prisma.disbursement.create({
+        data: {
+          payeeId: randomPayee.id,
+          fundSourceId: randomFund.id,
+          method: Method.LDDAP,
+          lddapMthd: lddapMethod,
+          lddapNum: genCode("LDDAP"),
+          dateReceived: randomDate,
+          grossAmount: gross,
+          totalDeductions: tax,
+          netAmount: net,
+          particulars: `Payment for services (LDDAP ${lddapMethod}) - Batch ${i}`,
+          status: Status.PAID,
+          approvedAt: new Date(),
+          references: {
+            create: {
+              acicNum: genCode("ACIC"),
+              orsNum: genCode("ORS"),
+              dvNum: genCode("DV"),
+              uacsCode: `5-02-${getRandomInt(10, 99)}-${getRandomInt(100, 999)}`,
+              respCode: `19-001-03-${getRandomInt(100, 999)}`,
+            },
+          },
+          items: {
+            create: [
+              {
+                description: "Generic Service",
+                amount: gross,
+                accountCode: "5-02-99-990",
+              },
+            ],
+          },
+          deductions: {
+            create: [{ deductionType: "Tax (5%)", amount: tax.toFixed(2) }],
           },
         },
-
-        // --- Relations: Items & Deductions ---
-        items: {
-          create: [
-            {
-              description: "Generic Service",
-              amount: gross,
-              accountCode: "5-02-99-990",
-            },
-          ],
-        },
-        deductions: {
-          create: [
-            {
-              deductionType: "Tax (5%)",
-              amount: tax.toFixed(2),
-            },
-          ],
-        },
-      },
-    });
+      });
+      lddapCreated++;
+    } catch (error) {
+      console.error(`Failed to create LDDAP disbursement ${i}:`, error.message);
+      lddapFailed++;
+    }
   }
+
+  console.log(
+    `Created ${lddapCreated}/10 LDDAP disbursements (${lddapFailed} failed)`,
+  );
+
+  let checkCreated = 0;
+  let checkFailed = 0;
 
   // --- CHECK Method (10 Items) ---
-  console.log("Generating 10 CHECK Disbursements...");
-
+  console.log("Creating CHECK disbursements...");
   for (let i = 1; i <= 10; i++) {
-    const randomFund = funds[getRandomInt(0, funds.length - 1)];
-    const randomPayee = payees[getRandomInt(0, payees.length - 1)];
-    const randomDate = getRandomDate(thisMonth, today);
+    try {
+      const randomFund = funds[getRandomInt(0, funds.length - 1)];
+      const randomPayee = payees[getRandomInt(0, payees.length - 1)];
+      const randomDate = getRandomDate(thisMonth, today);
 
-    const gross = getRandomInt(5000, 20000); // Checks often smaller amounts
-    const tax = 0; // Simple example with no tax
-    const net = gross;
-
-    const isPaid = true;
-    const status = isPaid ? Status.PAID : Status.PENDING;
-
-    await prisma.disbursement.create({
-      data: {
-        payeeId: randomPayee.id,
-        fundSourceId: randomFund.id,
-
-        // --- CHECK Specific Fields ---
-        method: Method.CHECK,
-        lddapMthd: null, // Not applicable
-        lddapNum: null,
-        checkNum: genCode("CHK"), // Required for Check method
-
-        // --- Common Fields ---
-        dateReceived: randomDate,
-        dateEntered: new Date(),
-        grossAmount: gross,
-        totalDeductions: tax,
-        netAmount: net,
-        particulars: `Payment via Check - Batch ${i}`,
-        status: status,
-        approvedAt: isPaid ? new Date() : null,
-
-        // --- Relations: References ---
-        references: {
-          create: {
-            acicNum: "N/A", // Checks might not have ACIC
-            orsNum: genCode("ORS"),
-            dvNum: genCode("DV"),
-            uacsCode: `5-02-${getRandomInt(10, 99)}-${getRandomInt(100, 999)}`,
-            respCode: `19-001-03-${getRandomInt(100, 999)}`,
+      const gross = getRandomInt(5000, 20000);
+      await prisma.disbursement.create({
+        data: {
+          payeeId: randomPayee.id,
+          fundSourceId: randomFund.id,
+          method: Method.CHECK,
+          checkNum: genCode("CHK"),
+          dateReceived: randomDate,
+          grossAmount: gross,
+          totalDeductions: 0,
+          netAmount: gross,
+          particulars: `Payment via Check - Batch ${i}`,
+          status: Status.PAID,
+          approvedAt: new Date(),
+          references: {
+            create: {
+              acicNum: "N/A",
+              orsNum: genCode("ORS"),
+              dvNum: genCode("DV"),
+              uacsCode: `5-02-${getRandomInt(10, 99)}-${getRandomInt(100, 999)}`,
+              respCode: `19-001-03-${getRandomInt(100, 999)}`,
+            },
+          },
+          items: {
+            create: [
+              {
+                description: "Supply Purchase",
+                amount: gross,
+                accountCode: "5-02-03-010",
+              },
+            ],
           },
         },
-
-        items: {
-          create: [
-            {
-              description: "Supply Purchase",
-              amount: gross,
-              accountCode: "5-02-03-010",
-            },
-          ],
-        },
-        // No deductions for this batch
-      },
-    });
+      });
+      checkCreated++;
+    } catch (error) {
+      console.error(`Failed to create CHECK disbursement ${i}:`, error.message);
+      checkFailed++;
+    }
   }
+
+  console.log(
+    `Created ${checkCreated}/10 CHECK disbursements (${checkFailed} failed)`,
+  );
 
   //* --- Create Dummy Logs ---
   await prisma.logs.createMany({
     data: [
+      {
+        userId: systemUser.id,
+        log: "System initialized and seeded by default user",
+      },
       { userId: encoder.id, log: "Created disbursement DV-2024-01-001" },
       { userId: staff.id, log: "Approved disbursement DV-2024-01-005" },
       { userId: admin.id, log: "Updated Fund Source GF-101 balance" },
-      { userId: encoder.id, log: "Generated bulk seed data for testing" },
     ],
   });
 
   console.log("Logs created.");
-  console.log("Seeding completed successfully.");
+  console.log("");
+  console.log("Seeding completed successfully!");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log(`   System User ID: ${systemUser.id}`);
+  console.log(`   Total Users: 4`);
+  console.log(`   Total Funds: ${funds.length}`);
+  console.log(`   Total Ledgers: ${ledgersCreated}`);
+  console.log(`   Total Payees: ${payees.length}`);
+  console.log(`   Total Disbursements: ${lddapCreated + checkCreated}`);
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
 main()

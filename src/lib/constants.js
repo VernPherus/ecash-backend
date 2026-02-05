@@ -27,5 +27,18 @@ export const Status = {
 export const Reset = {
   MONTHLY: "MONTHLY",
   YEARLY: "YEARLY",
+  QUARTERLY: "QUARTERLY",
   NONE: "NONE",
+};
+
+export const NotifType = {
+  INFO: "INFO",
+  WARNING: "WARNING",
+  SUCCESS: "SUCCESS",
+  ALERT: "ALERT",
+};
+
+export const LedgerStatus = {
+  OPEN: "OPEN",
+  CLOSED: "CLOSED",
 };

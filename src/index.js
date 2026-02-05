@@ -9,10 +9,14 @@ import payeeRoutes from "./routes/payee.route.js";
 import disbursementRoutes from "./routes/disbursement.route.js";
 import logRoutes from "./routes/log.route.js";
 import reportRoutes from "./routes/report.route.js";
+import systemRoutes from "./routes/system.route.js";
+import ledgerRoutes from "./routes/ledger.route.js";
+import notifRoutes from "./routes/notification.route.js";
+
+import { app, server } from "./lib/socket.js";
+import { initScheduler } from "./lib/scheduler.js";
 
 dotenv.config();
-
-const app = express();
 
 //* PORT
 const PORT = process.env.PORT;
@@ -24,7 +28,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 //* APPLICATION STARTUP PROCESS
@@ -39,7 +43,13 @@ app.use("/api/payee", payeeRoutes);
 app.use("/api/disbursement", disbursementRoutes);
 app.use("/api/logs", logRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/system", systemRoutes);
+app.use("/api/ledger", ledgerRoutes);
+app.use("/api/notif", notifRoutes);
 
-app.listen(PORT, () => {
+//* Start Scheduler
+initScheduler();
+
+server.listen(PORT, () => {
   console.log("server is running on port: " + PORT);
 });

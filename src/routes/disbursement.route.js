@@ -6,6 +6,7 @@ import {
   editRec,
   approveRec,
   removeRec,
+  generateLDDAPCode,
 } from "../controllers/disbursement.controller.js";
 import { protectRoute, authorize } from "../middleware/auth.middleware.js";
 
@@ -31,6 +32,13 @@ router.get(
   protectRoute,
   authorize(["USER", "ADMIN", "STAFF"]),
   showRec,
+);
+
+router.get(
+  "/genlddapcode",
+  protectRoute,
+  authorize(["ADMIN", "STAFF"]),
+  generateLDDAPCode,
 );
 
 router.post("/store", protectRoute, authorize(["ADMIN", "STAFF"]), storeRec);
