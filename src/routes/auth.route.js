@@ -8,7 +8,7 @@ import {
   checkAuth,
   resetPassword,
   updateProfile,
-  removeUser,
+  deactivateUser,
 } from "../controllers/auth.controller.js";
 import { protectRoute, authorize } from "../middleware/auth.middleware.js";
 
@@ -29,6 +29,11 @@ router.get("/showUsers", protectRoute, authorize(["ADMIN"]), showUsers);
 
 router.put("/updateProfile", protectRoute, updateProfile);
 router.put("/grantAdmin/:id", protectRoute, authorize(["ADMIN"]), grantAdmin);
-router.put("/remove/:id", protectRoute, authorize(["ADMIN"]), removeUser);
+router.put(
+  "/deactivate/:id",
+  protectRoute,
+  authorize(["ADMIN"]),
+  deactivateUser,
+);
 
 export default router;

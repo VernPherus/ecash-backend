@@ -348,7 +348,7 @@ export const resetPassword = async (req, res) => {
  * @param {*} res
  * @returns
  */
-export const removeUser = async (req, res) => {
+export const deactivateUser = async (req, res) => {
   const { id } = req.params;
 
   try {
