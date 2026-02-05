@@ -20,12 +20,12 @@ const router = express.Router();
 router.post("/signup", signup);
 router.post("/login", login);
 router.post("/logout", logout);
+router.put("/resetPassword", resetPassword);
 
 router.get("/check", protectRoute, checkAuth);
 
 router.get("/showUsers", protectRoute, authorize(["ADMIN"]), showUsers);
 
-router.put("/resetPassword", protectRoute, resetPassword);
 router.put("/updateProfile", protectRoute, updateProfile);
 router.put("/grantAdmin/:id", protectRoute, authorize(["ADMIN"]), grantAdmin);
 
