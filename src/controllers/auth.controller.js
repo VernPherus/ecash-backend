@@ -173,7 +173,7 @@ export const logout = (req, res) => {
  */
 export const showUsers = async (req, res) => {
   try {
-    const allUsers = await prisma.user.findMany();
+    const allUsers = await prisma.user.findMany({ where: { isActive: true } });
     res.status(201).json({
       allUsers,
     });
@@ -342,21 +342,29 @@ export const resetPassword = async (req, res) => {
   }
 };
 
+/**
+ * * REMOVE USER
+ * @param {*} req
+ * @param {*} res
+ * @returns
+ */
 export const removeUser = async (req, res) => {
-  const { userId } = req.params;
+  const { id } = req.params;
 
   try {
+    const userId = parseInt(id);
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
-    const id = parseInt(userId);
-    if (isNaN(id)) {
+
+    if (isNaN(userId)) {
       return res.status(400).json({ message: "Invalid ID format" });
     }
 
     const deactivatedUser = await prisma.$transaction(async (tx) => {
       const existingUser = await tx.user.findUnique({
-        where: { id },
+        where: { id: userId },
       });
 
       if (!existingUser) {
@@ -368,7 +376,7 @@ export const removeUser = async (req, res) => {
       }
 
       return await tx.user.update({
-        where: { id },
+        where: { id: userId },
         data: { isActive: false },
       });
     });
