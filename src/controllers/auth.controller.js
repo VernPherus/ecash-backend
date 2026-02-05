@@ -341,3 +341,44 @@ export const resetPassword = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const removeUser = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+    const id = parseInt(userId);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
+
+    const deactivatedUser = await prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findUnique({
+        where: { id },
+      });
+
+      if (!existingUser) {
+        throw new Error("User not found");
+      }
+
+      if (existingUser.isActive === false) {
+        throw new Error("User is already deactivated");
+      }
+
+      return await tx.user.update({
+        where: { id },
+        data: { isActive: false },
+      });
+    });
+
+    return res.status(200).json({
+      message: "User deactivated successfully",
+      user: deactivatedUser,
+    });
+  } catch (error) {
+    console.log("Error in removeUser controller: " + error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
