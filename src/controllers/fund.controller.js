@@ -376,18 +376,18 @@ export const showFund = async (req, res) => {
 
   try {
     // Fetch fund entries with paid disbursements
-    const fund = await prisma.fund.findUnique({
+    const fund = await prisma.fundSource.findUnique({
       where: {
         id: Number(fundID),
       },
       include: {
         fundEntries: true,
-        disbursement: {
+        disbursements: {
           where: { status: Status.PAID },
           select: { netAmount: true },
         },
         _count: {
-          select: { disbursement: true },
+          select: { disbursements: true },
         },
       },
     });
