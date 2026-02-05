@@ -18,9 +18,7 @@ export const genLDDAPCode = async () => {
       lddapNum: {
         not: null,
       },
-      deletedAt: {
-        not: null,
-      },
+      deletedAt: null,
     },
     select: { lddapNum: true },
     orderBy: { createdAt: "desc" },
