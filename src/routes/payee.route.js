@@ -24,7 +24,7 @@ router.get(
 router.get(
   "/showPayee/:id",
   protectRoute,
-  authorize(["STAFF", "ADMIN"]),
+  authorize(["STAFF", "ADMIN", "USER"]),
   showPayee,
 );
 
