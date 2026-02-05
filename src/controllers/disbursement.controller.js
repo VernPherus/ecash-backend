@@ -6,6 +6,7 @@ import { genLDDAPCode } from "../lib/codeGenerator.js";
 import { calculateGross, calculateDeductions } from "../lib/formulas.js";
 import { io } from "../lib/socket.js";
 import { sendConfirmationEmail } from "../lib/mail.js";
+import { broadcastNotification } from "../lib/notification.js"; 
 
 /**
  * * GENERATE LDDAP CODE: Generates LDDAP code for lddap entries
@@ -214,6 +215,20 @@ export const storeRec = async (req, res) => {
       });
     }
 
+    //* Broadcast Notification (NEW)
+    const refNum =
+      newDisbursement.lddapNum ||
+      newDisbursement.checkNum ||
+      `#${newDisbursement.id}`;
+    const payeeName = newDisbursement.payee?.name || "Unknown Payee";
+
+    await broadcastNotification(
+      "New Disbursement Created",
+      `A new disbursement ${refNum} for ${payeeName} has been encoded.`,
+      "INFO",
+      null, // Add link if you have a frontend route like `/disbursement/${newDisbursement.id}`
+    );
+
     //* Socket.io implementation
     io.emit("disbursement_updates", { type: "CREATE", data: newDisbursement });
 
@@ -301,7 +316,7 @@ export const displayRec = async (req, res) => {
       ];
     }
 
-    //*  Execute Query
+    //* Execute Query
     const [totalRecords, records] = await prisma.$transaction([
       prisma.disbursement.count({ where }),
 
@@ -674,6 +689,17 @@ export const approveRec = async (req, res) => {
         purpose: result.particulars || "Disbursement Payment",
       });
     }
+
+    //* Broadcast Notification (NEW)
+    const refNum = result.lddapNum || result.checkNum || `#${result.id}`;
+    const payeeName = result.payee?.name || "Unknown Payee";
+
+    await broadcastNotification(
+      "Disbursement Approved",
+      `Disbursement ${refNum} for ${payeeName} has been approved.`,
+      "SUCCESS",
+      null, // Add link if necessary
+    );
 
     // Socket.io
     io.emit("disbursement_updates", { type: "UPDATE", data: result });

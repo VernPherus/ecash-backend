@@ -28,12 +28,119 @@ export const initScheduler = () => {
       console.error("Scheduler error: ", error);
     }
   });
+
+  /** --------------------------------------------------------
+   ** DAILY LEDGER UPDATE
+   * Runs at 00:00 every day
+   * Cron expression: "0 0 * * *"
+   * Ensures ledger totals (entries, disbursements, ending balance) are accurate
+   * --------------------------------------------------------
+   */
+  cron.schedule("0 0 * * *", async () => {
+    console.log("Running Daily Ledger Updates...");
+    try {
+      await updateDailyLedgers();
+    } catch (error) {
+      console.error("Daily Ledger Update error: ", error);
+    }
+  });
 };
 
 /** --------------------------------------------------------
- *  *LOGIC
- *  --------------------------------------------------------
+ * *LOGIC
+ * --------------------------------------------------------
  */
+
+/**
+ * DAILY LEDGER UPDATE
+ * Recalculates totalEntry, totalDisbursed, and endingBalance for all OPEN ledgers
+ * based on actual FundEntry and Disbursement records.
+ */
+const updateDailyLedgers = async () => {
+  // Get all OPEN ledgers
+  const openLedgers = await prisma.fundLedger.findMany({
+    where: { status: "OPEN" },
+    include: {
+      fundSource: { select: { code: true } },
+    },
+  });
+
+  if (openLedgers.length === 0) {
+    console.log("No open ledgers to update.");
+    return;
+  }
+
+  console.log(`Updating ${openLedgers.length} open ledgers...`);
+  let updatedCount = 0;
+
+  for (const ledger of openLedgers) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Calculate Total Entries (FundEntry) for this period
+        // Note: We do NOT use totalNCA() here to avoid double-counting initialBalance
+        // if it was already captured in startingBalance.
+        const entryAgg = await tx.fundEntry.aggregate({
+          _sum: { amount: true },
+          where: {
+            fundSourceId: ledger.fundSourceId,
+            createdAt: {
+              gte: ledger.startDate,
+              lte: ledger.endDate,
+            },
+            deletedAt: null,
+          },
+        });
+        const totalEntry = Number(entryAgg._sum.amount || 0);
+
+        // 2. Calculate Total Disbursements (PAID) for this period
+        const disbAgg = await tx.disbursement.aggregate({
+          _sum: { netAmount: true },
+          where: {
+            fundSourceId: ledger.fundSourceId,
+            status: "PAID",
+            dateReceived: {
+              gte: ledger.startDate,
+              lte: ledger.endDate,
+            },
+            deletedAt: null,
+          },
+        });
+        const totalDisbursed = Number(disbAgg._sum.netAmount || 0);
+
+        // 3. Calculate New Ending Balance
+        const startingBalance = Number(ledger.startingBalance);
+        const endingBalance = startingBalance + totalEntry - totalDisbursed;
+
+        // 4. Update Ledger
+        await tx.fundLedger.update({
+          where: { id: ledger.id },
+          data: {
+            totalEntry,
+            totalDisbursed,
+            endingBalance,
+            updatedAt: new Date(),
+          },
+        });
+      });
+      updatedCount++;
+    } catch (error) {
+      console.error(
+        `Failed to update ledger #${ledger.id} (${ledger.fundSource.code}):`,
+        error.message,
+      );
+    }
+  }
+
+  // Log summary
+  await prisma.logs.create({
+    data: {
+      userId: 1, // System User
+      log: `SYSTEM: Daily Ledger Update completed. Updated ${updatedCount}/${openLedgers.length} ledgers.`,
+    },
+  });
+
+  console.log(`✅ Daily update complete. Updated ${updatedCount} ledgers.`);
+};
 
 /**
  * AUTOMATIC FUND RESET
