@@ -147,7 +147,7 @@ const updateDailyLedgers = async () => {
  * Resets funds based on their reset schedule (MONTHLY, QUARTERLY, YEARLY)
  * Each fund is reset individually with its own calculated balance
  */
-const performFundReset = async () => {
+export const performFundReset = async () => {
   const targets = getActiveResetTargets();
   if (targets.length === 0) return;
 
@@ -238,7 +238,7 @@ const performFundReset = async () => {
  * Creates monthly ledgers for all active funds
  * Carries over previous ending balance or uses initial balance
  */
-const createMonthlyLedgers = async () => {
+export const createMonthlyLedgers = async () => {
   const { year, month } = getSystemTimeDetails();
 
   // Get all active funds
@@ -340,7 +340,7 @@ const createMonthlyLedgers = async () => {
  * AUDIT NOTIFICATIONS
  * Alerts Admin/Staff that the new month has started.
  */
-const sendAuditNotification = async () => {
+export const sendAuditNotification = async () => {
   const { month, year } = getSystemTimeDetails();
   const monthName = new Date().toLocaleString("default", { month: "long" });
 
