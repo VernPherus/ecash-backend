@@ -106,11 +106,15 @@ export const storeRec = async (req, res) => {
     dvNum,
     uacsCode,
     respCode,
+    sendMail,
     items = [],
     deductions = [],
   } = req.body;
 
   const userId = req.user?.id;
+
+  // * Handle boolean flag safely (handles "true", true, "false", false, undefined)
+  const shouldSendMail = String(sendMail) === "true";
 
   try {
     if (!payeeId || !fundsourceId) {
@@ -139,6 +143,15 @@ export const storeRec = async (req, res) => {
     const calculatedDeductions = calculateDeductions(deductions);
     const calculatedNet = calculatedGross - calculatedDeductions;
 
+    // Determine Status (Default to PAID if not specified)
+    const recordStatus = status || Status.PAID;
+
+    // Determine Approved Date (If PAID but no date provided, default to Now)
+    let finalApprovedAt = approvedAt ? new Date(approvedAt) : null;
+    if (recordStatus === Status.PAID && !finalApprovedAt) {
+      finalApprovedAt = new Date();
+    }
+
     const newDisbursement = await prisma.$transaction(async (tx) => {
       const record = await tx.disbursement.create({
         data: {
@@ -149,10 +162,10 @@ export const storeRec = async (req, res) => {
           particulars,
           method,
           lddapMthd: lddapMethod,
-          status: status || Status.PAID,
+          status: recordStatus,
           ageLimit: ageLimit ? Number(ageLimit) : 5,
           dateReceived: new Date(dateReceived),
-          approvedAt: approvedAt ? new Date(approvedAt) : null,
+          approvedAt: finalApprovedAt,
           grossAmount: calculatedGross,
           totalDeductions: calculatedDeductions,
           netAmount: calculatedNet,
@@ -202,7 +215,7 @@ export const storeRec = async (req, res) => {
         `Created disbursement ${refId} for ${record.payee?.name} (Net: ${record.netAmount})`,
       );
 
-      // * UPDATE LEDGER
+      // * UPDATE LEDGER (Only if PAID)
       if (record.status === Status.PAID) {
         await updateLedger(tx, record.fundSourceId, record.dateReceived);
       }
@@ -210,8 +223,13 @@ export const storeRec = async (req, res) => {
       return record;
     });
 
-    // Send Confirmation email
-    if (newDisbursement.payee?.email) {
+    // * Send Confirmation email
+    // LOGIC FIX: Only send if user requested IT AND the record is actually PAID.
+    if (
+      shouldSendMail &&
+      newDisbursement.status === Status.PAID &&
+      newDisbursement.payee?.email
+    ) {
       const formattedAmount = new Intl.NumberFormat("en-PH", {
         style: "currency",
         currency: "PHP",
@@ -234,13 +252,14 @@ export const storeRec = async (req, res) => {
         newDisbursement.checkNum ||
         `REF-${newDisbursement.id}`;
 
-      await sendConfirmationEmail(newDisbursement.payee.email, {
+      // We don't await this to prevent blocking the response if email server is slow
+      sendConfirmationEmail(newDisbursement.payee.email, {
         payeeName: newDisbursement.payee.name,
         amount: formattedAmount,
         referenceNumber: referenceNumber,
         date: formattedDate,
         purpose: newDisbursement.particulars || "Disbursement Payment",
-      });
+      }).catch((err) => console.error("Background Email Error:", err));
     }
 
     // Broadcast Notification

@@ -4,6 +4,7 @@ import { generateToken } from "../lib/utils.js";
 import { Role } from "../lib/constants.js";
 import { sentOtpEmail } from "../lib/mail.js";
 import crypto from "crypto";
+import { createLog } from "../lib/auditLogger.js";
 
 /**
  ** SIGNUP: Create a user and store into database
@@ -184,6 +185,103 @@ export const showUsers = async (req, res) => {
 };
 
 /**
+ * * EDIT USER (ADMIN): Updates user details including sensitive data like email/password
+ * @param {*} req
+ * @param {*} res
+ */
+export const editUser = async (req, res) => {
+  const { id } = req.params;
+  const { username, firstName, lastName, email, password } = req.body;
+  const adminId = req.user?.id; // Retrieved from protectRoute middleware
+
+  try {
+    const targetUserId = parseInt(id);
+
+    // 1. Validation
+    if (isNaN(targetUserId)) {
+      return res.status(400).json({ message: "Invalid user ID." });
+    }
+
+    // 2. Check if the user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // 3. Prepare Update Data
+    const dataToUpdate = {};
+
+    // Update Basic Info if provided
+    if (firstName) dataToUpdate.firstName = firstName;
+    if (lastName) dataToUpdate.lastName = lastName;
+
+    // Update Username (Check for duplicates if changed)
+    if (username && username !== existingUser.username) {
+      const duplicateUsername = await prisma.user.findFirst({
+        where: { username: { equals: username, mode: "insensitive" } },
+      });
+      if (duplicateUsername) {
+        return res.status(409).json({ message: "Username already exists." });
+      }
+      dataToUpdate.username = username;
+    }
+
+    // Update Email (Check for duplicates if changed)
+    if (email && email !== existingUser.email) {
+      const duplicateEmail = await prisma.user.findUnique({
+        where: { email },
+      });
+      if (duplicateEmail) {
+        return res.status(409).json({ message: "Email already exists." });
+      }
+      dataToUpdate.email = email;
+    }
+
+    // Update Password (Hash it)
+    if (password) {
+      if (password.length < 6) {
+        return res
+          .status(400)
+          .json({ message: "Password must be at least 6 characters." });
+      }
+      const salt = await bcrypt.genSalt(10);
+      dataToUpdate.password = await bcrypt.hash(password, salt);
+    }
+
+    // 4. Perform Update & Log Transaction
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: targetUserId },
+        data: dataToUpdate,
+      });
+
+      // Log the action
+      await createLog(
+        tx,
+        adminId,
+        `Admin updated details for user: ${user.username} (ID: ${user.id})`,
+      );
+
+      return user;
+    });
+
+    // 5. Response (Exclude password)
+    const { password: _, ...userSafe } = updatedUser;
+
+    res.status(200).json({
+      message: "User details updated successfully.",
+      user: userSafe,
+    });
+  } catch (error) {
+    console.log("Error in editUser controller: " + error.message);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+/**
  * * GRANT ADMIN: Updates user role to admin
  * @param {*} req
  * @param {*} res
@@ -192,8 +290,14 @@ export const grantAdmin = async (req, res) => {
   const { id } = req.params;
 
   try {
+    const userId = parseInt(id, 10);
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ message: "Invalid User ID." });
+    }
+
     const promoteUser = await prisma.user.update({
-      where: { id: id },
+      where: { id: userId },
       data: {
         role: Role.ADMIN,
       },

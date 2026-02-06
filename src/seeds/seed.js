@@ -65,7 +65,7 @@ async function main() {
   `;
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@fundwatch.com" },
+    where: { email: "admin@ecash.com" },
     update: {
       username: "admin_user",
       firstName: "Super",
@@ -76,14 +76,14 @@ async function main() {
       username: "admin_user",
       firstName: "Super",
       lastName: "Admin",
-      email: "admin@fundwatch.com",
+      email: "admin@ecash.com",
       password: passwordHash,
       role: Role.ADMIN,
     },
   });
 
   const staff = await prisma.user.upsert({
-    where: { email: "approver@fundwatch.com" },
+    where: { email: "staff@ecash.com" },
     update: {
       username: "approver_staff",
       firstName: "Finance",
@@ -94,14 +94,14 @@ async function main() {
       username: "approver_staff",
       firstName: "Finance",
       lastName: "Manager",
-      email: "approver@fundwatch.com",
+      email: "staff@ecash.com",
       password: passwordHash,
       role: Role.STAFF,
     },
   });
 
   const encoder = await prisma.user.upsert({
-    where: { email: "encoder@fundwatch.com" },
+    where: { email: "user@ecash.com" },
     update: {
       username: "encoder_user",
       firstName: "User",
@@ -112,7 +112,7 @@ async function main() {
       username: "encoder_user",
       firstName: "User",
       lastName: "View",
-      email: "encoder@fundwatch.com",
+      email: "user@ecash.com",
       password: passwordHash,
       role: Role.USER,
     },
@@ -239,194 +239,6 @@ async function main() {
 
   console.log(`Created ${ledgersCreated} initial ledger(s).`);
 
-  //* --- Create Payees ---
-  const payeesData = [
-    {
-      name: "Acme Office Supplies",
-      address: "123 Business St, City Center",
-      tinNum: "123-456-789-000",
-      bankName: "Landbank",
-      accountNumber: "1111-2222-33",
-      contactPerson: "John Doe",
-      type: PayeeType.SUPPLIER,
-    },
-    {
-      name: "BuildRight Construction",
-      address: "45 Industrial Ave, West Sector",
-      tinNum: "987-654-321-000",
-      bankName: "BDO",
-      accountNumber: "5555-6666-77",
-      contactPerson: "Jane Smith",
-      type: PayeeType.SUPPLIER,
-    },
-    {
-      name: "John Doe",
-      address: "99 Utility Road",
-      type: PayeeType.EMPLOYEE,
-      remarks: "",
-    },
-    {
-      name: "TechSolutions Inc",
-      address: "88 Cyberzone, IT Park",
-      bankName: "BPI",
-      accountNumber: "9988-7766-55",
-      type: PayeeType.EMPLOYEE,
-    },
-  ];
-
-  const payees = [];
-  for (const p of payeesData) {
-    const existing = await prisma.payee.findFirst({ where: { name: p.name } });
-    if (!existing) {
-      const payee = await prisma.payee.create({ data: p });
-      payees.push(payee);
-    } else {
-      payees.push(existing);
-    }
-  }
-
-  console.log("Payees created.");
-
-  //* Create Disbursements
-  const today = new Date();
-  const thisMonth = new Date();
-  thisMonth.setDate(1);
-
-  let lddapCreated = 0;
-  let lddapFailed = 0;
-
-  // --- LDDAP Method (10 Items) ---
-  console.log("Creating LDDAP disbursements...");
-  for (let i = 1; i <= 10; i++) {
-    try {
-      const randomFund = funds[getRandomInt(0, funds.length - 1)];
-      const randomPayee = payees[getRandomInt(0, payees.length - 1)];
-      const randomDate = getRandomDate(thisMonth, today);
-
-      const gross = getRandomInt(10000, 50000);
-      const tax = gross * 0.05;
-      const net = gross - tax;
-
-      const isOnline = i % 2 === 0;
-      const lddapMethod = isOnline ? LddapMethod.ONLINE : LddapMethod.MANUAL;
-
-      await prisma.disbursement.create({
-        data: {
-          payeeId: randomPayee.id,
-          fundSourceId: randomFund.id,
-          method: Method.LDDAP,
-          lddapMthd: lddapMethod,
-          lddapNum: genCode("LDDAP"),
-          dateReceived: randomDate,
-          grossAmount: gross,
-          totalDeductions: tax,
-          netAmount: net,
-          particulars: `Payment for services (LDDAP ${lddapMethod}) - Batch ${i}`,
-          status: Status.PAID,
-          approvedAt: new Date(),
-          references: {
-            create: {
-              acicNum: genCode("ACIC"),
-              orsNum: genCode("ORS"),
-              dvNum: genCode("DV"),
-              uacsCode: `5-02-${getRandomInt(10, 99)}-${getRandomInt(100, 999)}`,
-              respCode: `19-001-03-${getRandomInt(100, 999)}`,
-            },
-          },
-          items: {
-            create: [
-              {
-                description: "Generic Service",
-                amount: gross,
-                accountCode: "5-02-99-990",
-              },
-            ],
-          },
-          deductions: {
-            create: [{ deductionType: "Tax (5%)", amount: tax.toFixed(2) }],
-          },
-        },
-      });
-      lddapCreated++;
-    } catch (error) {
-      console.error(`Failed to create LDDAP disbursement ${i}:`, error.message);
-      lddapFailed++;
-    }
-  }
-
-  console.log(
-    `Created ${lddapCreated}/10 LDDAP disbursements (${lddapFailed} failed)`,
-  );
-
-  let checkCreated = 0;
-  let checkFailed = 0;
-
-  // --- CHECK Method (10 Items) ---
-  console.log("Creating CHECK disbursements...");
-  for (let i = 1; i <= 10; i++) {
-    try {
-      const randomFund = funds[getRandomInt(0, funds.length - 1)];
-      const randomPayee = payees[getRandomInt(0, payees.length - 1)];
-      const randomDate = getRandomDate(thisMonth, today);
-
-      const gross = getRandomInt(5000, 20000);
-      await prisma.disbursement.create({
-        data: {
-          payeeId: randomPayee.id,
-          fundSourceId: randomFund.id,
-          method: Method.CHECK,
-          checkNum: genCode("CHK"),
-          dateReceived: randomDate,
-          grossAmount: gross,
-          totalDeductions: 0,
-          netAmount: gross,
-          particulars: `Payment via Check - Batch ${i}`,
-          status: Status.PAID,
-          approvedAt: new Date(),
-          references: {
-            create: {
-              acicNum: "N/A",
-              orsNum: genCode("ORS"),
-              dvNum: genCode("DV"),
-              uacsCode: `5-02-${getRandomInt(10, 99)}-${getRandomInt(100, 999)}`,
-              respCode: `19-001-03-${getRandomInt(100, 999)}`,
-            },
-          },
-          items: {
-            create: [
-              {
-                description: "Supply Purchase",
-                amount: gross,
-                accountCode: "5-02-03-010",
-              },
-            ],
-          },
-        },
-      });
-      checkCreated++;
-    } catch (error) {
-      console.error(`Failed to create CHECK disbursement ${i}:`, error.message);
-      checkFailed++;
-    }
-  }
-
-  console.log(
-    `Created ${checkCreated}/10 CHECK disbursements (${checkFailed} failed)`,
-  );
-
-  //* --- Create Dummy Logs ---
-  await prisma.logs.createMany({
-    data: [
-      {
-        userId: systemUser.id,
-        log: "System initialized and seeded by default user",
-      },
-      { userId: encoder.id, log: "Created disbursement DV-2024-01-001" },
-      { userId: staff.id, log: "Approved disbursement DV-2024-01-005" },
-      { userId: admin.id, log: "Updated Fund Source GF-101 balance" },
-    ],
-  });
-
   console.log("Logs created.");
   console.log("");
   console.log("Seeding completed successfully!");
@@ -435,8 +247,6 @@ async function main() {
   console.log(`   Total Users: 4`);
   console.log(`   Total Funds: ${funds.length}`);
   console.log(`   Total Ledgers: ${ledgersCreated}`);
-  console.log(`   Total Payees: ${payees.length}`);
-  console.log(`   Total Disbursements: ${lddapCreated + checkCreated}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 

@@ -4,6 +4,7 @@ import {
   login,
   logout,
   showUsers,
+  editUser,
   grantAdmin,
   checkAuth,
   resetPassword,
@@ -27,6 +28,7 @@ router.get("/check", protectRoute, checkAuth);
 
 router.get("/showUsers", protectRoute, authorize(["ADMIN"]), showUsers);
 
+router.put("/editUser/:id", protectRoute, authorize(["ADMIN"]), editUser);
 router.put("/updateProfile", protectRoute, updateProfile);
 router.put("/grantAdmin/:id", protectRoute, authorize(["ADMIN"]), grantAdmin);
 router.put(
