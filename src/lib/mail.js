@@ -144,7 +144,7 @@ export const sendConfirmationEmail = async (to, details) => {
                   <tr>
                     <td style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
                       <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-                        &copy; ${new Date().getFullYear()} FundWatch Application. All rights reserved.
+                        &copy; ${new Date().getFullYear()} eCash Application. All rights reserved.
                       </p>
                     </td>
                   </tr>

@@ -372,13 +372,13 @@ export const buildCheckReport = (worksheet, data) => {
   const sigRow = certStartRow + 5;
   worksheet.mergeCells(`D${sigRow}:F${sigRow}`);
   const sigName = worksheet.getCell(`D${sigRow}`);
-  sigName.value = "VENUS P. ANDAYA";
+  sigName.value = "Name";
   sigName.font = { bold: true, underline: true };
   sigName.alignment = { horizontal: "center" };
 
   worksheet.mergeCells(`D${sigRow + 1}:F${sigRow + 1}`);
   const sigRole = worksheet.getCell(`D${sigRow + 1}`);
-  sigRole.value = "Administrative Officer V / Cashier III";
+  sigRole.value = "Position";
   sigRole.alignment = { horizontal: "center" };
 
   worksheet.mergeCells(`D${sigRow + 2}:F${sigRow + 2}`);
