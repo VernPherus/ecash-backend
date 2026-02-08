@@ -1,15 +1,16 @@
 import { prisma } from "../lib/prisma.js";
 
 /**
- * LDDAP and ACIC code generator helpers.
+ * LDDAP code generator helpers.
  * @returns Formatted LDDAP code e.g. 01101101-01-0001-2026
  */
-export const genLDDAPCode = async () => {
-  const currentDate = new Date();
+export const genLDDAPCode = async (date, seriesCode) => {
+  const [year, month, day] = date.split("-").map(Number);
+  const currentDate = new Date(year, month - 1, day);
   const currentYear = currentDate.getFullYear();
 
-  const prefix = "01101101"; // Constant
-  const month = String(currentDate.getMonth() + 1).padStart(2, "0"); // Formatting: 2 Digits, January = 01
+  const prefix = seriesCode; 
+  const formattedMonth = String(currentDate.getMonth() + 1).padStart(2, "0"); // Formatting: 2 Digits, January = 01
 
   // Get current series
   // Formatting: 4 digits e.g. 0019, 0020, increment based on last number, resets per year
@@ -40,7 +41,7 @@ export const genLDDAPCode = async () => {
   }
 
   const seriesFormatted = String(series).padStart(4, "0");
-  const year = currentYear;
+  const formattedYear = currentYear;
 
-  return `${prefix}-${month}-${seriesFormatted}-${year}`;
+  return `${prefix}-${formattedMonth}-${seriesFormatted}-${formattedYear}`;
 };

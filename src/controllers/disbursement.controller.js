@@ -72,11 +72,17 @@ const updateLedger = async (tx, fundSourceId, dateReceived) => {
 };
 
 /**
- * * GENERATE LDDAP CODE
+ * * GENERATE LDDAP SERIES CODE
  */
 export const generateLDDAPCode = async (req, res) => {
+  const {date, seriesCode} = req.body
+
   try {
-    const lddapCode = await genLDDAPCode();
+    if (!date || !seriesCode) {
+      return res.status(400).json({message: "Date and series code required"})
+    }
+
+    const lddapCode = await genLDDAPCode(date, seriesCode);
     res.status(200).json({ lddapCode });
   } catch (error) {
     console.log("Error in the genLDDAPCode controller: " + error);
