@@ -16,15 +16,15 @@ import { getSystemTimeDetails } from "../lib/time.js";
  * @returns
  */
 export const newFund = async (req, res) => {
-  const { code, name, initialBalance, description, reset } = req.body;
+  const { code, seriesCode, name, initialBalance, description, reset } = req.body;
   const userId = req.user?.id;
 
   try {
     //* Validation
-    if (!code || !name) {
+    if (!code || !name || !seriesCode) {
       return res
         .status(400)
-        .json({ message: "Fund Code and Name are required." });
+        .json({ message: "Fund Code, Name, and Series Code are required." });
     }
 
     //* Check for duplicates
@@ -42,6 +42,7 @@ export const newFund = async (req, res) => {
       const fund = await tx.fundSource.create({
         data: {
           code,
+          seriesCode,
           name,
           initialBalance: initialBalance || 0,
           description,
