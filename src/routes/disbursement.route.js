@@ -34,7 +34,7 @@ router.get(
   showRec,
 );
 
-router.get(
+router.post(
   "/genlddapcode",
   protectRoute,
   authorize(["ADMIN", "STAFF"]),

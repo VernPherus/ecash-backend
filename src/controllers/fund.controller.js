@@ -498,7 +498,7 @@ export const resetFund = async (req, res) => {
  */
 export const editFund = async (req, res) => {
   const { id } = req.params;
-  const { code, name, initialBalance, description, reset } = req.body;
+  const { code, seriesCode, name, initialBalance, description, reset } = req.body;
   const userId = req.user?.id;
 
   try {
@@ -535,6 +535,7 @@ export const editFund = async (req, res) => {
         },
         data: {
           code,
+          seriesCode,
           name,
           initialBalance:
             initialBalance !== undefined ? Number(initialBalance) : undefined,
