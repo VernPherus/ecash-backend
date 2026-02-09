@@ -258,7 +258,6 @@ export const storeRec = async (req, res) => {
         newDisbursement.checkNum ||
         `REF-${newDisbursement.id}`;
 
-      // We don't await this to prevent blocking the response if email server is slow
       sendConfirmationEmail(newDisbursement.payee.email, {
         payeeName: newDisbursement.payee.name,
         amount: formattedAmount,

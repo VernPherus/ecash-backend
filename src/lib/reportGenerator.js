@@ -48,7 +48,7 @@ export const buildDebitReport = (worksheet, data) => {
     `Entity Name: Department of Science and Technology - Region 1`;
   worksheet.getCell("A7").value = `Fund Cluster: ${fund.code} - ${fund.name}`;
   worksheet.getCell("A8").value =
-    `Bank Name/Account No.: ${fund.description || "LBP MDS ACCOUNT"}`;
+    `Bank Name/Account No.:`;
 
   worksheet.getCell("H6").value = `Report No.: ${reportNumber}`;
   worksheet.getCell("H7").value = `Sheet No.:`; // To be filled manually or logically if multipage
@@ -174,13 +174,13 @@ export const buildDebitReport = (worksheet, data) => {
   const sigRow = certStartRow + 5;
   worksheet.mergeCells(`D${sigRow}:F${sigRow}`);
   const sigName = worksheet.getCell(`D${sigRow}`);
-  sigName.value = "VENUS P. ANDAYA";
+  sigName.value = "<Name Here>";
   sigName.font = { bold: true, underline: true };
   sigName.alignment = { horizontal: "center" };
 
   worksheet.mergeCells(`D${sigRow + 1}:F${sigRow + 1}`);
   const sigRole = worksheet.getCell(`D${sigRow + 1}`);
-  sigRole.value = "Administrative Officer V / Cashier III";
+  sigRole.value = "<Position Here>";
   sigRole.alignment = { horizontal: "center" };
 
   worksheet.mergeCells(`D${sigRow + 2}:F${sigRow + 2}`);
@@ -237,7 +237,7 @@ export const buildCheckReport = (worksheet, data) => {
     `Entity Name: Department of Science and Technology - Region 1`;
   worksheet.getCell("A7").value = `Fund Cluster: ${fund.code} - ${fund.name}`;
   worksheet.getCell("A8").value =
-    `Bank Name/Account No.: ${fund.description || "LBP MDS ACCOUNT"}`;
+    `Bank Name/Account No.: `;
 
   worksheet.getCell("H6").value = `Report No.: ${reportNumber}`;
   worksheet.getCell("H7").value = `Sheet No.:`;
@@ -372,13 +372,13 @@ export const buildCheckReport = (worksheet, data) => {
   const sigRow = certStartRow + 5;
   worksheet.mergeCells(`D${sigRow}:F${sigRow}`);
   const sigName = worksheet.getCell(`D${sigRow}`);
-  sigName.value = "VENUS P. ANDAYA";
+  sigName.value = "<Name Here>";
   sigName.font = { bold: true, underline: true };
   sigName.alignment = { horizontal: "center" };
 
   worksheet.mergeCells(`D${sigRow + 1}:F${sigRow + 1}`);
   const sigRole = worksheet.getCell(`D${sigRow + 1}`);
-  sigRole.value = "Administrative Officer V / Cashier III";
+  sigRole.value = "<Position Here>";
   sigRole.alignment = { horizontal: "center" };
 
   worksheet.mergeCells(`D${sigRow + 2}:F${sigRow + 2}`);
