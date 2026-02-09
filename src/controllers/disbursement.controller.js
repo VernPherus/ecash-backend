@@ -75,11 +75,11 @@ const updateLedger = async (tx, fundSourceId, dateReceived) => {
  * * GENERATE LDDAP SERIES CODE
  */
 export const generateLDDAPCode = async (req, res) => {
-  const {date, seriesCode} = req.body
+  const { date, seriesCode } = req.body;
 
   try {
     if (!date || !seriesCode) {
-      return res.status(400).json({message: "Date and series code required"})
+      return res.status(400).json({ message: "Date and series code required" });
     }
 
     const lddapCode = await genLDDAPCode(date, seriesCode);
@@ -91,7 +91,10 @@ export const generateLDDAPCode = async (req, res) => {
 };
 
 /**
- * * STORE RECORD
+ * * STORE REQCORD: Validates disbursement input, initiates transaction, creates log, sends notification and email after successful storing
+ * @param {*} req
+ * @param {*} res
+ * @returns
  */
 export const storeRec = async (req, res) => {
   const {
@@ -119,10 +122,11 @@ export const storeRec = async (req, res) => {
 
   const userId = req.user?.id;
 
-  // * Handle boolean flag safely (handles "true", true, "false", false, undefined)
+  // * Handle boolean flag safely
   const shouldSendMail = String(sendMail) === "true";
 
   try {
+    // 1. Basic Validation
     if (!payeeId || !fundsourceId) {
       return res
         .status(400)
@@ -145,6 +149,35 @@ export const storeRec = async (req, res) => {
         .json({ message: "At least one item is required." });
     }
 
+    // 2. Uniqueness Check (LDDAP & Check Number)
+    const uniqueConditions = [];
+    if (lddapNum && String(lddapNum).trim() !== "") {
+      uniqueConditions.push({ lddapNum: String(lddapNum).trim() });
+    }
+    if (checkNum && String(checkNum).trim() !== "") {
+      uniqueConditions.push({ checkNum: String(checkNum).trim() });
+    }
+
+    if (uniqueConditions.length > 0) {
+      const existingRecord = await prisma.disbursement.findFirst({
+        where: {
+          deletedAt: null, // Only check active records
+          OR: uniqueConditions,
+        },
+      });
+
+      if (existingRecord) {
+        const conflictField =
+          existingRecord.lddapNum === lddapNum
+            ? `LDDAP Number (${lddapNum})`
+            : `Check Number (${checkNum})`;
+        return res
+          .status(409)
+          .json({ message: `${conflictField} already exists.` });
+      }
+    }
+
+    // 3. Calculation
     const calculatedGross = calculateGross(items);
     const calculatedDeductions = calculateDeductions(deductions);
     const calculatedNet = calculatedGross - calculatedDeductions;
@@ -152,7 +185,7 @@ export const storeRec = async (req, res) => {
     // Determine Status (Default to PAID if not specified)
     const recordStatus = status || Status.PAID;
 
-    // Determine Approved Date (If PAID but no date provided, default to Now)
+    // Determine Approved Date
     let finalApprovedAt = approvedAt ? new Date(approvedAt) : null;
     if (recordStatus === Status.PAID && !finalApprovedAt) {
       finalApprovedAt = new Date();
@@ -230,7 +263,6 @@ export const storeRec = async (req, res) => {
     });
 
     // * Send Confirmation email
-    // LOGIC FIX: Only send if user requested IT AND the record is actually PAID.
     if (
       shouldSendMail &&
       newDisbursement.status === Status.PAID &&
@@ -409,6 +441,9 @@ export const showRec = async (req, res) => {
 /**
  * * EDIT RECORD
  */
+/**
+ * * EDIT RECORD
+ */
 export const editRec = async (req, res) => {
   const { id } = req.params;
   const userId = req.user?.id;
@@ -445,6 +480,37 @@ export const editRec = async (req, res) => {
       return res.status(404).json({ message: "Disbursement not found." });
     }
 
+    // 1. Uniqueness Check (LDDAP & Check Number)
+    // We must check if these exist in OTHER records (not the one we are editing)
+    const uniqueConditions = [];
+    if (lddapNum && String(lddapNum).trim() !== "") {
+      uniqueConditions.push({ lddapNum: String(lddapNum).trim() });
+    }
+    if (checkNum && String(checkNum).trim() !== "") {
+      uniqueConditions.push({ checkNum: String(checkNum).trim() });
+    }
+
+    if (uniqueConditions.length > 0) {
+      const existingRecord = await prisma.disbursement.findFirst({
+        where: {
+          deletedAt: null,
+          id: { not: Number(id) }, // Exclude current record
+          OR: uniqueConditions,
+        },
+      });
+
+      if (existingRecord) {
+        const conflictField =
+          existingRecord.lddapNum === lddapNum
+            ? `LDDAP Number (${lddapNum})`
+            : `Check Number (${checkNum})`;
+        return res
+          .status(409)
+          .json({ message: `${conflictField} already exists.` });
+      }
+    }
+
+    // 2. Prepare Calculations
     let newGross = Number(currentRecord.grossAmount);
     let newTotalDeductions = Number(currentRecord.totalDeductions);
     let itemsUpdateOp = undefined;
@@ -484,6 +550,7 @@ export const editRec = async (req, res) => {
 
     const newNet = newGross - newTotalDeductions;
 
+    // 3. Database Transaction
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await tx.disbursement.update({
         where: { id: Number(id) },

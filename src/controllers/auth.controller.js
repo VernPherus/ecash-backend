@@ -386,7 +386,7 @@ export const resetPassword = async (req, res) => {
         return res.status(500).json({ message: "Error sending email service" });
       }
 
-      return res.status(200).json({ messag: "OTP sent to your email." });
+      return res.status(200).json({ message: "OTP sent to your email." });
     }
 
     // validation
