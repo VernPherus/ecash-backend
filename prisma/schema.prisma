@@ -101,7 +101,7 @@ model References {
   @@map("tb_references")
 }
 
-model ResponsibilityCodes{
+model ResponsibilityCodes {
   id       Int    @id @default(autoincrement())
   respCode String @map("resp_code")
 
@@ -115,6 +115,8 @@ model Disbursement {
   fundSourceId    Int?                     @map("fund_source_id")
   lddapNum        String?                  @unique @map("lddap_num")
   checkNum        String?                  @unique @map("checkNum")
+  projectName     String?                  @map("project_name")
+  nca_num         String?                  @map("nca_num")
   dateReceived    DateTime                 @map("date_received")
   dateEntered     DateTime                 @default(now()) @map("date_entered")
   grossAmount     Decimal                  @map("gross_amount") @db.Decimal(15, 2)
@@ -251,6 +253,7 @@ enum LddapMethod {
 enum Status {
   PAID
   PENDING
+  CANCELED
 }
 
 enum Reset {
