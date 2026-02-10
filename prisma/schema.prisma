@@ -116,7 +116,7 @@ model Disbursement {
   lddapNum        String?                  @unique @map("lddap_num")
   checkNum        String?                  @unique @map("checkNum")
   projectName     String?                  @map("project_name")
-  ncaNum         String?                  @map("nca_num")
+  ncaNum          String?                  @map("nca_num")
   dateReceived    DateTime                 @map("date_received")
   dateEntered     DateTime                 @default(now()) @map("date_entered")
   grossAmount     Decimal                  @map("gross_amount") @db.Decimal(15, 2)

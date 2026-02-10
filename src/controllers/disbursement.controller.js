@@ -200,6 +200,8 @@ export const storeRec = async (req, res) => {
           fundSourceId: Number(fundsourceId),
           lddapNum,
           checkNum,
+          projectName,
+          nca_num: ncaNum,
           particulars,
           method,
           lddapMthd: lddapMethod,
