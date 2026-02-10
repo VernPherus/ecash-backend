@@ -253,7 +253,7 @@ enum LddapMethod {
 enum Status {
   PAID
   PENDING
-  CANCELED
+  CANCELLED
 }
 
 enum Reset {
