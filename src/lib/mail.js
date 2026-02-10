@@ -64,7 +64,7 @@ export const sentOtpEmail = async (to, otp) => {
             
             <!-- Copyright -->
             <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-              &copy; ${new Date().getFullYear()} ecASH Application. All rights reserved.
+              &copy; ${new Date().getFullYear()} eCash. All rights reserved.
             </p>
           </div>
         </div>
@@ -219,7 +219,7 @@ export const sendConfirmationEmail = async (to, details) => {
                       
                       <!-- Copyright -->
                       <p style="color: #94a3b8; font-size: 12px; margin: 0; text-align: center;">
-                        &copy; ${new Date().getFullYear()} ecASH Application. All rights reserved.
+                        &copy; ${new Date().getFullYear()} eCash. All rights reserved.
                       </p>
                     </td>
                   </tr>
