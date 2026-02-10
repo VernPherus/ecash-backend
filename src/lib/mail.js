@@ -99,7 +99,7 @@ export const sendConfirmationEmail = async (to, details) => {
       to: to,
       subject: "Payment confirmation",
       html: `
-      <!DOCTYPE html>
+            <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
@@ -182,9 +182,10 @@ export const sendConfirmationEmail = async (to, details) => {
                               For inquiries or assistance, please contact us at:
                             </p>
                             <p style="margin: 0;">
-                              <a href="mailto:cash@region1.dost.gov.ph" style="color: #2563eb; font-size: 14px; font-weight: 600; text-decoration: none;">
+                              email: <a href="mailto:cash@region1.dost.gov.ph" style="color: #2563eb; font-size: 14px; font-weight: 600; text-decoration: none;">
                                 cash@region1.dost.gov.ph
-                              </a>
+                              </a><br>
+                              phone: 0960 408 8190
                             </p>
                           </td>
                         </tr>
