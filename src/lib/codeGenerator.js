@@ -9,7 +9,7 @@ export const genLDDAPCode = async (date, seriesCode) => {
   const currentDate = new Date(year, month - 1, day);
   const currentYear = currentDate.getFullYear();
 
-  const prefix = seriesCode; 
+  const prefix = seriesCode;
   const formattedMonth = String(currentDate.getMonth() + 1).padStart(2, "0"); // Formatting: 2 Digits, January = 01
 
   // Get current series
@@ -18,6 +18,7 @@ export const genLDDAPCode = async (date, seriesCode) => {
     where: {
       lddapNum: {
         not: null,
+        startsWith: prefix,
       },
       deletedAt: null,
     },
@@ -33,7 +34,7 @@ export const genLDDAPCode = async (date, seriesCode) => {
       const lastYear = parseInt(parts[3], 10);
       const lastSeries = parseInt(parts[2], 10);
 
-      // For same Year
+      // For same Year AND same prefix
       if (lastYear === currentYear && !isNaN(lastSeries)) {
         series = lastSeries + 1;
       }
