@@ -102,6 +102,8 @@ export const storeRec = async (req, res) => {
     fundsourceId,
     lddapNum,
     checkNum,
+    projectName,
+    ncaNum,
     particulars,
     method,
     lddapMethod,
