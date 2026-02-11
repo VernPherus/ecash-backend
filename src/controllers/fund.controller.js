@@ -6,6 +6,8 @@ import {
   totalMonthBalance,
   cashUtilization,
   totalNCA,
+  totalProcessedDv,
+  totalCancelledDv,
 } from "../lib/formulas.js";
 import { getSystemTimeDetails } from "../lib/time.js";
 
@@ -16,7 +18,8 @@ import { getSystemTimeDetails } from "../lib/time.js";
  * @returns
  */
 export const newFund = async (req, res) => {
-  const { code, seriesCode, name, initialBalance, description, reset } = req.body;
+  const { code, seriesCode, name, initialBalance, description, reset } =
+    req.body;
   const userId = req.user?.id;
 
   try {
@@ -231,6 +234,8 @@ export const displayFundStats = async (req, res) => {
         const totalDisbursement = await totalDisb(fund.id, month);
         const totalMonthly = await totalMonthBalance(fund.id, month);
         const totalCashUtil = await cashUtilization(fund.id, month);
+        const processedDVNum = await totalProcessedDv(fund.id, month);
+        const cancelledDVNum = await totalCancelledDv(fund.id, month);
 
         return {
           fundId: fund.id,
@@ -238,6 +243,8 @@ export const displayFundStats = async (req, res) => {
           totalDisbursement,
           totalMonthly,
           totalCashUtil,
+          processedDVNum,
+          cancelledDVNum
         };
       }),
     );
@@ -498,7 +505,8 @@ export const resetFund = async (req, res) => {
  */
 export const editFund = async (req, res) => {
   const { id } = req.params;
-  const { code, seriesCode, name, initialBalance, description, reset } = req.body;
+  const { code, seriesCode, name, initialBalance, description, reset } =
+    req.body;
   const userId = req.user?.id;
 
   try {

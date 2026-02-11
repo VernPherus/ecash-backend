@@ -636,7 +636,7 @@ export const editRec = async (req, res) => {
       return record;
     });
 
-    io.emit("disbusrement_updates", { type: "UPDATE", data: updatedRecord });
+    io.emit("disbursement_updates", { type: "UPDATE", data: updatedRecord });
     res.status(200).json(updatedRecord);
   } catch (error) {
     console.log("Error in editRec controller: ", error.message);
@@ -667,6 +667,10 @@ export const approveRec = async (req, res) => {
 
     if (!record) {
       return res.status(404).json({ message: "Disbursement not found." });
+    }
+
+    if (record.status === Status.CANCELLED) {
+      return res.status(409).json({ message: "Record is cancelled." });
     }
 
     if (record.status === Status.PAID) {
@@ -761,6 +765,71 @@ export const approveRec = async (req, res) => {
 };
 
 /**
+ * * CANCEL RECORD: Updates disbursement status into "CANCELLED"
+ * @param {*} req
+ * @param {*} res
+ * @returns
+ */
+export const cancelRec = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user?.id;
+
+  try {
+    if (!id) {
+      return res.status(400).json({ message: "Disbursement ID required" });
+    }
+    if (!userId) {
+      return res.status(400).json({ message: "Unauthorized." });
+    }
+
+    const cancelledRecord = await prisma.$transaction(async (tx) => {
+      // Check if record exists and is cancellable
+      const existingRecord = await tx.disbursement.findUnique({
+        where: { id: Number(id) },
+      });
+
+      if (!existingRecord) {
+        throw new Error("RECORD_NOT_FOUND");
+      }
+
+      // Prevent cancelling already cancelled records
+      if (existingRecord.status === "CANCELLED") {
+        throw new Error("ALREADY_CANCELLED");
+      }
+
+      const record = await tx.disbursement.update({
+        where: { id: Number(id) },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+
+      await createLog(tx, userId, `Cancelled disbursement #${record.id}`);
+
+      return record;
+    });
+
+    io.emit("disbursement_updates", {
+      type: "UPDATE",
+      data: cancelledRecord,
+    });
+    res.status(200).json(cancelledRecord);
+  } catch (error) {
+    console.error("Error in cancelReq controller: " + error.message);
+
+    if (error.message === "RECORD_NOT_FOUND") {
+      return res.status(404).json({ message: "Disbursement not found" });
+    }
+    if (error.message === "ALREADY_CANCELLED") {
+      return res
+        .status(400)
+        .json({ message: "Disbursement already cancelled" });
+    }
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
  * * REMOVE RECORD
  */
 export const removeRec = async (req, res) => {
@@ -819,7 +888,7 @@ export const removeRec = async (req, res) => {
       id: Number(id),
     });
   } catch (error) {
-    console.log("Error in removeRec controller: " + error.message);
+    console.error("Error in removeRec controller: " + error.message);
     return res.status(500).json({ message: "Internal server error." });
   }
 };
