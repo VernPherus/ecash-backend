@@ -56,6 +56,7 @@ model FundEntry {
   fundSourceId Int       @map("fund_source_id")
   name         String
   amount       Decimal   @default(0) @db.Decimal(15, 2)
+  enteredAt    DateTime?  @map("entered_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   deletedAt    DateTime? @map("deleted_at")
 
@@ -99,14 +100,6 @@ model References {
 
   @@index([acicNum, orsNum, dvNum, uacsCode, respCode])
   @@map("tb_references")
-}
-
-model ResponsibilityCodes {
-  id       Int    @id @default(autoincrement())
-  respCode String @map("resp_code")
-
-  @@index([respCode])
-  @@map("tb_responsibiliy_codes")
 }
 
 model Disbursement {

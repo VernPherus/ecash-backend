@@ -115,6 +115,7 @@ export const newEntry = async (req, res) => {
       if (!fund) {
         throw new Error("Fund source not found");
       }
+
       // Create entry
       const entry = await tx.fundEntry.create({
         data: {
@@ -131,6 +132,9 @@ export const newEntry = async (req, res) => {
           },
         },
       });
+
+      // Update Ledger
+      
 
       // Create log
       await createLog(

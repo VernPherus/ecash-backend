@@ -65,7 +65,7 @@ export const generateDebitReport = async (req, res) => {
       endDate,
       fund,
       disbursements,
-      reportNumber: `${year}-${month}-001`, // Logic can be improved
+      reportNumber: `${year}-${month}`, 
     };
 
     buildDebitReport(worksheet, reportData);
