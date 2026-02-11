@@ -1,8 +1,7 @@
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 
 /**
  * * FORMAT: REPORT OF ADVICE TO DEBIT ACCOUNT ISSUED (ADA)
- * Replicates the layout of Appendix 13 from debit.pdf
  */
 export const buildDebitReport = (worksheet, data) => {
   const { startDate, endDate, fund, disbursements, reportNumber } = data;
@@ -16,28 +15,33 @@ export const buildDebitReport = (worksheet, data) => {
     { key: "rcc", width: 15 }, // E
     { key: "payee", width: 30 }, // F
     { key: "uacs", width: 15 }, // G
-    { key: "nature", width: 40 }, // H
-    { key: "amount", width: 18 }, // I
+    { key: "project", width: 20 }, // H 
+    { key: "nature", width: 40 }, // I
+    { key: "amount", width: 18 }, // J
+    { key: "date_received", width: 15 }, // K
+    { key: "manual_date", width: 15 }, // L 
+    { key: "online_date", width: 15 }, // M 
+    { key: "days_processed", width: 10 }, // N 
   ];
 
   //* --- HEADER SECTION ---
 
   // Row 1: Appendix Label
-  worksheet.mergeCells("H1:I1");
+  worksheet.mergeCells("H1:I1"); // Kept mostly same, or adjust to M1:N1 if needed, but left as is to match approximate visual
   const appendixCell = worksheet.getCell("H1");
   appendixCell.value = "Appendix 13";
   appendixCell.font = { italic: true, size: 10 };
   appendixCell.alignment = { horizontal: "right" };
 
   // Row 3: Title
-  worksheet.mergeCells("A3:I3");
+  worksheet.mergeCells("A3:N3"); // Expanded merge
   const titleCell = worksheet.getCell("A3");
   titleCell.value = "REPORT OF ADVICE TO DEBIT ACCOUNT ISSUED";
   titleCell.font = { bold: true, size: 14 };
   titleCell.alignment = { horizontal: "center" };
 
   // Row 4: Period
-  worksheet.mergeCells("A4:I4");
+  worksheet.mergeCells("A4:N4"); // Expanded merge
   const periodCell = worksheet.getCell("A4");
   periodCell.value = `Period Covered: ${format(startDate, "MMMM dd")} to ${format(endDate, "MMMM dd, yyyy")}`;
   periodCell.font = { bold: true, size: 11 };
@@ -47,11 +51,10 @@ export const buildDebitReport = (worksheet, data) => {
   worksheet.getCell("A6").value =
     `Entity Name: Department of Science and Technology - Region 1`;
   worksheet.getCell("A7").value = `Fund Cluster: ${fund.code} - ${fund.name}`;
-  worksheet.getCell("A8").value =
-    `Bank Name/Account No.:`;
+  worksheet.getCell("A8").value = `Bank Name/Account No.:`;
 
-  worksheet.getCell("H6").value = `Report No.: ${reportNumber}`;
-  worksheet.getCell("H7").value = `Sheet No.:`; // To be filled manually or logically if multipage
+  worksheet.getCell("L6").value = `Report No.: ${reportNumber}`;
+  worksheet.getCell("L7").value = `Sheet No.:`;
 
   // --- TABLE HEADERS ---
   const headerRowIdx = 10;
@@ -63,13 +66,18 @@ export const buildDebitReport = (worksheet, data) => {
     "Responsibility\nCenter Code",
     "Payee",
     "UACS Object\nCode",
+    "Project",
     "Nature of Payment",
     "Amount",
+    "Date Received",
+    "Manual: Date Submitted to LBP",
+    "Online: Date Approved",
+    "No. of Days processed",
   ];
 
   const headerRow = worksheet.getRow(headerRowIdx);
   headerRow.values = headers;
-  headerRow.height = 30;
+  headerRow.height = 45; // Increased height for wrapped headers
 
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, size: 10 };
@@ -102,6 +110,27 @@ export const buildDebitReport = (worksheet, data) => {
     const orsNo = d.references?.[0]?.orsNum || "";
     const respCode = d.references?.[0]?.respCode || "";
 
+    // Processing Dates Logic
+    let manualDate = "";
+    let onlineDate = "";
+    let daysProcessed = "";
+
+    // Assuming approvedAt signifies the completion/submission date
+    if (d.approvedAt) {
+      if (d.lddapMthd === "MANUAL") {
+        manualDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+      } else if (d.lddapMthd === "ONLINE") {
+        onlineDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+      }
+
+      if (d.dateReceived) {
+        daysProcessed = differenceInDays(
+          new Date(d.approvedAt),
+          new Date(d.dateReceived),
+        );
+      }
+    }
+
     const rowValues = [
       d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date
       adaNo, // ADA
@@ -110,8 +139,13 @@ export const buildDebitReport = (worksheet, data) => {
       respCode, // RCC
       d.payee?.name || "", // Payee
       uacs, // UACS
+      d.projectName || "", // Project (New)
       d.particulars || "", // Nature
       Number(d.netAmount), // Amount
+      d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date Received (New)
+      manualDate, // Manual Date (New)
+      onlineDate, // Online Date (New)
+      daysProcessed, // Days Processed (New)
     ];
 
     const row = worksheet.getRow(currentRowIdx);
@@ -128,13 +162,14 @@ export const buildDebitReport = (worksheet, data) => {
       };
       cell.alignment = { vertical: "middle", wrapText: true };
 
-      // Align Amount Right
-      if (colNum === 9) {
+      // Align Amount Right (Column 10/J)
+      if (colNum === 10) {
         cell.numFmt = "#,##0.00";
         cell.alignment = { vertical: "middle", horizontal: "right" };
       }
       // Align Dates/Codes Center
-      if (colNum <= 5 || colNum === 7) {
+      // Columns: 1,2,3,4,5,7,8,11,12,13,14
+      if ([1, 2, 3, 4, 5, 7, 8, 11, 12, 13, 14].includes(colNum)) {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       }
     });
@@ -145,11 +180,13 @@ export const buildDebitReport = (worksheet, data) => {
 
   //* --- FOOTER (TOTAL) ---
   const footerRow = worksheet.getRow(currentRowIdx);
-  footerRow.getCell(8).value = "GRAND TOTAL";
-  footerRow.getCell(8).font = { bold: true };
-  footerRow.getCell(8).alignment = { horizontal: "right" };
+  // Total Label at Column I (9)
+  footerRow.getCell(9).value = "GRAND TOTAL";
+  footerRow.getCell(9).font = { bold: true };
+  footerRow.getCell(9).alignment = { horizontal: "right" };
 
-  const totalCell = footerRow.getCell(9);
+  // Total Value at Column J (10)
+  const totalCell = footerRow.getCell(10);
   totalCell.value = totalAmount;
   totalCell.numFmt = "#,##0.00";
   totalCell.font = { bold: true };
@@ -159,39 +196,41 @@ export const buildDebitReport = (worksheet, data) => {
   //* --- CERTIFICATION ---
   const certStartRow = currentRowIdx + 3;
 
-  worksheet.mergeCells(`A${certStartRow}:I${certStartRow}`);
+  worksheet.mergeCells(`A${certStartRow}:N${certStartRow}`);
   const certTitle = worksheet.getCell(`A${certStartRow}`);
   certTitle.value = "CERTIFICATION";
   certTitle.font = { bold: true, size: 12 };
   certTitle.alignment = { horizontal: "center" };
 
-  worksheet.mergeCells(`A${certStartRow + 1}:I${certStartRow + 2}`);
+  worksheet.mergeCells(`A${certStartRow + 1}:N${certStartRow + 2}`);
   const certText = worksheet.getCell(`A${certStartRow + 1}`);
   certText.value = `I hereby certify on my official oath that the above is a true statement of all ADAs issued by me during the period stated above for which ADA Nos. ${disbursements[0]?.lddapNum || "..."} to ${disbursements[disbursements.length - 1]?.lddapNum || "..."} inclusive, were actually issued by me in the amounts shown thereon.`;
   certText.alignment = { horizontal: "center", wrapText: true };
 
   //* Signature Block
   const sigRow = certStartRow + 5;
-  worksheet.mergeCells(`D${sigRow}:F${sigRow}`);
-  const sigName = worksheet.getCell(`D${sigRow}`);
+  // Centering signature around the middle-right area (Columns G-J approx or shift to center relative to page)
+  // Expanded report width suggests shifting signature slightly right or keeping center.
+  // Middle of A-N (14 cols) is roughly G-H.
+  worksheet.mergeCells(`F${sigRow}:I${sigRow}`);
+  const sigName = worksheet.getCell(`F${sigRow}`);
   sigName.value = "<Name Here>";
   sigName.font = { bold: true, underline: true };
   sigName.alignment = { horizontal: "center" };
 
-  worksheet.mergeCells(`D${sigRow + 1}:F${sigRow + 1}`);
-  const sigRole = worksheet.getCell(`D${sigRow + 1}`);
+  worksheet.mergeCells(`F${sigRow + 1}:I${sigRow + 1}`);
+  const sigRole = worksheet.getCell(`F${sigRow + 1}`);
   sigRole.value = "<Position Here>";
   sigRole.alignment = { horizontal: "center" };
 
-  worksheet.mergeCells(`D${sigRow + 2}:F${sigRow + 2}`);
-  const sigDate = worksheet.getCell(`D${sigRow + 2}`);
+  worksheet.mergeCells(`F${sigRow + 2}:I${sigRow + 2}`);
+  const sigDate = worksheet.getCell(`F${sigRow + 2}`);
   sigDate.value = format(new Date(), "MMMM dd, yyyy");
   sigDate.alignment = { horizontal: "center" };
 };
 
 /**
  * * FORMAT: REPORT OF CHECKS ISSUED (RCI)
- * Replicates the layout of Appendix 13 (Checks)
  */
 export const buildCheckReport = (worksheet, data) => {
   const { startDate, endDate, fund, disbursements, reportNumber } = data;
@@ -205,8 +244,13 @@ export const buildCheckReport = (worksheet, data) => {
     { key: "rcc", width: 15 }, // E
     { key: "payee", width: 30 }, // F
     { key: "uacs", width: 15 }, // G
-    { key: "nature", width: 40 }, // H
-    { key: "amount", width: 18 }, // I
+    { key: "project", width: 20 }, // H (New)
+    { key: "nature", width: 40 }, // I
+    { key: "amount", width: 18 }, // J
+    { key: "date_received", width: 15 }, // K (New)
+    { key: "manual_date", width: 15 }, // L (New)
+    { key: "online_date", width: 15 }, // M (New)
+    { key: "days_processed", width: 10 }, // N (New)
   ];
 
   //* --- HEADER SECTION ---
@@ -219,14 +263,14 @@ export const buildCheckReport = (worksheet, data) => {
   appendixCell.alignment = { horizontal: "right" };
 
   // Row 3: Title
-  worksheet.mergeCells("A3:I3");
+  worksheet.mergeCells("A3:N3");
   const titleCell = worksheet.getCell("A3");
   titleCell.value = "REPORT OF CHECKS ISSUED";
   titleCell.font = { bold: true, size: 14 };
   titleCell.alignment = { horizontal: "center" };
 
   // Row 4: Period
-  worksheet.mergeCells("A4:I4");
+  worksheet.mergeCells("A4:N4");
   const periodCell = worksheet.getCell("A4");
   periodCell.value = `Period Covered: ${format(startDate, "MMMM dd")} to ${format(endDate, "MMMM dd, yyyy")}`;
   periodCell.font = { bold: true, size: 11 };
@@ -239,26 +283,31 @@ export const buildCheckReport = (worksheet, data) => {
   worksheet.getCell("A8").value =
     `Bank Name/Account No.: `;
 
-  worksheet.getCell("H6").value = `Report No.: ${reportNumber}`;
-  worksheet.getCell("H7").value = `Sheet No.:`;
+  worksheet.getCell("L6").value = `Report No.: ${reportNumber}`;
+  worksheet.getCell("L7").value = `Sheet No.:`;
 
   //* --- TABLE HEADERS ---
   const headerRowIdx = 10;
   const headers = [
     "Date",
-    "Check\nSerial No.", // Changed from ADA to Check
+    "Check\nSerial No.",
     "DV/Payroll\nNo.",
     "ORS/BURS No.",
     "Responsibility\nCenter Code",
     "Payee",
     "UACS Object\nCode",
+    "Project",
     "Nature of Payment",
     "Amount",
+    "Date Received",
+    "Manual: Date Submitted to LBP",
+    "Online: Date Approved",
+    "No. of Days processed",
   ];
 
   const headerRow = worksheet.getRow(headerRowIdx);
   headerRow.values = headers;
-  headerRow.height = 30;
+  headerRow.height = 45;
 
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, size: 10 };
@@ -286,10 +335,27 @@ export const buildCheckReport = (worksheet, data) => {
       d.items.map((i) => i.accountCode).join(", ");
 
     // Determine Refs
-    const checkNo = d.checkNum || ""; // Using checkNum for this report
+    const checkNo = d.checkNum || "";
     const dvNo = d.references?.[0]?.dvNum || "";
     const orsNo = d.references?.[0]?.orsNum || "";
     const respCode = d.references?.[0]?.respCode || "";
+
+    // Processing Dates Logic (Check Report Specific: Date always Online)
+    let manualDate = ""; // Checks don't use Manual LDDAP col
+    let onlineDate = "";
+    let daysProcessed = "";
+
+    if (d.approvedAt) {
+      // Logic: For Check Report, always populate Online column as requested
+      onlineDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+
+      if (d.dateReceived) {
+        daysProcessed = differenceInDays(
+          new Date(d.approvedAt),
+          new Date(d.dateReceived),
+        );
+      }
+    }
 
     const rowValues = [
       d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date
@@ -299,8 +365,13 @@ export const buildCheckReport = (worksheet, data) => {
       respCode, // RCC
       d.payee?.name || "", // Payee
       uacs, // UACS
+      d.projectName || "", // Project (New)
       d.particulars || "", // Nature
       Number(d.netAmount), // Amount
+      d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date Received (New)
+      manualDate, // Manual Date (Empty)
+      onlineDate, // Online Date (Populated)
+      daysProcessed, // Days Processed
     ];
 
     const row = worksheet.getRow(currentRowIdx);
@@ -317,13 +388,13 @@ export const buildCheckReport = (worksheet, data) => {
       };
       cell.alignment = { vertical: "middle", wrapText: true };
 
-      // Align Amount Right
-      if (colNum === 9) {
+      // Align Amount Right (Column 10/J)
+      if (colNum === 10) {
         cell.numFmt = "#,##0.00";
         cell.alignment = { vertical: "middle", horizontal: "right" };
       }
       // Align Dates/Codes Center
-      if (colNum <= 5 || colNum === 7) {
+      if ([1, 2, 3, 4, 5, 7, 8, 11, 12, 13, 14].includes(colNum)) {
         cell.alignment = { vertical: "middle", horizontal: "center" };
       }
     });
@@ -334,11 +405,11 @@ export const buildCheckReport = (worksheet, data) => {
 
   //* --- FOOTER (TOTAL) ---
   const footerRow = worksheet.getRow(currentRowIdx);
-  footerRow.getCell(8).value = "GRAND TOTAL";
-  footerRow.getCell(8).font = { bold: true };
-  footerRow.getCell(8).alignment = { horizontal: "right" };
+  footerRow.getCell(9).value = "GRAND TOTAL";
+  footerRow.getCell(9).font = { bold: true };
+  footerRow.getCell(9).alignment = { horizontal: "right" };
 
-  const totalCell = footerRow.getCell(9);
+  const totalCell = footerRow.getCell(10);
   totalCell.value = totalAmount;
   totalCell.numFmt = "#,##0.00";
   totalCell.font = { bold: true };
@@ -348,13 +419,13 @@ export const buildCheckReport = (worksheet, data) => {
   //* --- CERTIFICATION ---
   const certStartRow = currentRowIdx + 3;
 
-  worksheet.mergeCells(`A${certStartRow}:I${certStartRow}`);
+  worksheet.mergeCells(`A${certStartRow}:N${certStartRow}`);
   const certTitle = worksheet.getCell(`A${certStartRow}`);
   certTitle.value = "CERTIFICATION";
   certTitle.font = { bold: true, size: 12 };
   certTitle.alignment = { horizontal: "center" };
 
-  worksheet.mergeCells(`A${certStartRow + 1}:I${certStartRow + 2}`);
+  worksheet.mergeCells(`A${certStartRow + 1}:N${certStartRow + 2}`);
   const certText = worksheet.getCell(`A${certStartRow + 1}`);
 
   // Dynamic Check numbers for certification
@@ -370,19 +441,19 @@ export const buildCheckReport = (worksheet, data) => {
 
   // Signature Block
   const sigRow = certStartRow + 5;
-  worksheet.mergeCells(`D${sigRow}:F${sigRow}`);
-  const sigName = worksheet.getCell(`D${sigRow}`);
+  worksheet.mergeCells(`F${sigRow}:I${sigRow}`);
+  const sigName = worksheet.getCell(`F${sigRow}`);
   sigName.value = "<Name Here>";
   sigName.font = { bold: true, underline: true };
   sigName.alignment = { horizontal: "center" };
 
-  worksheet.mergeCells(`D${sigRow + 1}:F${sigRow + 1}`);
-  const sigRole = worksheet.getCell(`D${sigRow + 1}`);
+  worksheet.mergeCells(`F${sigRow + 1}:I${sigRow + 1}`);
+  const sigRole = worksheet.getCell(`F${sigRow + 1}`);
   sigRole.value = "<Position Here>";
   sigRole.alignment = { horizontal: "center" };
 
-  worksheet.mergeCells(`D${sigRow + 2}:F${sigRow + 2}`);
-  const sigDate = worksheet.getCell(`D${sigRow + 2}`);
+  worksheet.mergeCells(`F${sigRow + 2}:I${sigRow + 2}`);
+  const sigDate = worksheet.getCell(`F${sigRow + 2}`);
   sigDate.value = format(new Date(), "MMMM dd, yyyy");
   sigDate.alignment = { horizontal: "center" };
 };
