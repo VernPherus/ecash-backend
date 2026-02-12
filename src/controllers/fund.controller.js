@@ -10,6 +10,7 @@ import {
   totalCancelledDv,
 } from "../lib/formulas.js";
 import { getSystemTimeDetails } from "../lib/time.js";
+import { updateLedgerFromEntry, createYearlyLedgers } from "../lib/ledger.js";
 
 /**
  * * NEW FUND: Create fund source and initializes the fund ledger
@@ -53,27 +54,12 @@ export const newFund = async (req, res) => {
         },
       });
 
-      // Dates for ledger
-      const { year, month } = getSystemTimeDetails();
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
+      // Get current year
+      const { year } = getSystemTimeDetails();
 
-      // Create initial ledger
-      await tx.fundLedger.create({
-        data: {
-          fundSourceId: fund.id,
-          year: year,
-          period: month,
-          startDate: startDate,
-          endDate: endDate,
-          startingBalance: fund.initialBalance,
-          endingBalance: fund.initialBalance,
-          totalEntry: 0,
-          totalDisbursed: 0,
-          status: LedgerStatus.OPEN,
-        },
-      });
-
+      // Create ledgers for the WHOLE year (Jan-Dec)
+      await createYearlyLedgers(tx, fund.id, year, fund.initialBalance);
+      
       // Create log
       await createLog(
         tx,
@@ -96,7 +82,7 @@ export const newFund = async (req, res) => {
  * @param {*} res
  */
 export const newEntry = async (req, res) => {
-  const { sourceId, name, amount } = req.body;
+  const { sourceId, name, amount, enteredAt } = req.body;
   const userId = req.user?.id;
 
   try {
@@ -116,12 +102,16 @@ export const newEntry = async (req, res) => {
         throw new Error("Fund source not found");
       }
 
+      // Determine effective date (use enteredAt if provided, otherwise now)
+      const entryDate = enteredAt ? new Date(enteredAt) : new Date();
+
       // Create entry
       const entry = await tx.fundEntry.create({
         data: {
           fundSourceId: Number(sourceId),
           name: name,
           amount: Number(amount),
+          enteredAt: entryDate,
         },
         include: {
           fundSource: {
@@ -133,8 +123,8 @@ export const newEntry = async (req, res) => {
         },
       });
 
-      // Update Ledger
-      
+      // Update Ledger based on the entry date
+      await updateLedgerFromEntry(tx, Number(sourceId), entryDate);
 
       // Create log
       await createLog(
@@ -248,7 +238,7 @@ export const displayFundStats = async (req, res) => {
           totalMonthly,
           totalCashUtil,
           processedDVNum,
-          cancelledDVNum
+          cancelledDVNum,
         };
       }),
     );
@@ -648,11 +638,23 @@ export const deactivateFund = async (req, res) => {
         },
       });
 
+      // Close all OPEN ledgers associated with this fund
+      await tx.fundLedger.updateMany({
+        where: {
+          fundSourceId: Number(id),
+          status: LedgerStatus.OPEN,
+        },
+        data: {
+          status: LedgerStatus.CLOSED,
+          updatedAt: new Date(),
+        },
+      });
+
       // Create Audit Log
       await createLog(
         tx,
         userId,
-        `Deactivated Fund Source: ${fundToCheck.code} - ${fundToCheck.name}`,
+        `Deactivated Fund Source: ${fundToCheck.code} - ${fundToCheck.name}. Closed all associated open ledgers.`,
       );
     });
 
@@ -699,6 +701,10 @@ export const deleteEntry = async (req, res) => {
         where: { id: Number(entryId) },
         data: { deletedAt: new Date() },
       });
+
+      // Update Ledger based on the entry's original date (enteredAt or createdAt)
+      const entryDate = entryToCheck.enteredAt || entryToCheck.createdAt;
+      await updateLedgerFromEntry(tx, entryToCheck.fundSourceId, entryDate);
 
       // Create Audit log:
       const logMessage = `Deleted allocation entry "${entryToCheck.name}"(${entryToCheck.amount}) from Fund ${entryToCheck.fundSource?.code}`;
