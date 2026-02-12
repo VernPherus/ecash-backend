@@ -15,33 +15,33 @@ export const buildDebitReport = (worksheet, data) => {
     { key: "rcc", width: 15 }, // E
     { key: "payee", width: 30 }, // F
     { key: "uacs", width: 15 }, // G
-    { key: "project", width: 20 }, // H 
+    { key: "project", width: 20 }, // H
     { key: "nature", width: 40 }, // I
     { key: "amount", width: 18 }, // J
     { key: "date_received", width: 15 }, // K
-    { key: "manual_date", width: 15 }, // L 
-    { key: "online_date", width: 15 }, // M 
-    { key: "days_processed", width: 10 }, // N 
+    { key: "manual_date", width: 15 }, // L
+    { key: "online_date", width: 15 }, // M
+    { key: "days_processed", width: 10 }, // N
   ];
 
   //* --- HEADER SECTION ---
 
   // Row 1: Appendix Label
-  worksheet.mergeCells("H1:I1"); // Kept mostly same, or adjust to M1:N1 if needed, but left as is to match approximate visual
+  worksheet.mergeCells("H1:I1");
   const appendixCell = worksheet.getCell("H1");
   appendixCell.value = "Appendix 13";
   appendixCell.font = { italic: true, size: 10 };
   appendixCell.alignment = { horizontal: "right" };
 
   // Row 3: Title
-  worksheet.mergeCells("A3:N3"); // Expanded merge
+  worksheet.mergeCells("A3:N3");
   const titleCell = worksheet.getCell("A3");
   titleCell.value = "REPORT OF ADVICE TO DEBIT ACCOUNT ISSUED";
   titleCell.font = { bold: true, size: 14 };
   titleCell.alignment = { horizontal: "center" };
 
   // Row 4: Period
-  worksheet.mergeCells("A4:N4"); // Expanded merge
+  worksheet.mergeCells("A4:N4");
   const periodCell = worksheet.getCell("A4");
   periodCell.value = `Period Covered: ${format(startDate, "MMMM dd")} to ${format(endDate, "MMMM dd, yyyy")}`;
   periodCell.font = { bold: true, size: 11 };
@@ -77,7 +77,7 @@ export const buildDebitReport = (worksheet, data) => {
 
   const headerRow = worksheet.getRow(headerRowIdx);
   headerRow.values = headers;
-  headerRow.height = 45; // Increased height for wrapped headers
+  headerRow.height = 45;
 
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, size: 10 };
@@ -99,54 +99,82 @@ export const buildDebitReport = (worksheet, data) => {
   let totalAmount = 0;
 
   disbursements.forEach((d) => {
-    // Determine UACS: Try Reference first, fallback to items
-    const uacs =
-      d.references?.[0]?.uacsCode ||
-      d.items.map((i) => i.accountCode).join(", ");
+    let rowValues = [];
 
-    // Determine Refs
-    const adaNo = d.lddapNum || "";
-    const dvNo = d.references?.[0]?.dvNum || "";
-    const orsNo = d.references?.[0]?.orsNum || "";
-    const respCode = d.references?.[0]?.respCode || "";
+    // Check for CANCELLED status
+    if (d.status === "CANCELLED") {
+      rowValues = [
+        "", // Date
+        d.lddapNum || "", // ADA (Retain Value)
+        "-", // DV
+        "-", // ORS
+        "-", // RCC
+        "CANCELLED", // Payee (Set to CANCELLED)
+        "-", // UACS
+        "-", // Project
+        "-", // Nature
+        "-", // Amount (Blank)
+        "-", // Date Received
+        "-", // Manual Date
+        "-", // Online Date
+        "-", // Days Processed
+      ];
+      // Note: We do NOT add to totalAmount for cancelled items
+    } else {
+      // --- STANDARD LOGIC FOR ACTIVE DISBURSEMENTS ---
 
-    // Processing Dates Logic
-    let manualDate = "";
-    let onlineDate = "";
-    let daysProcessed = "";
+      // Determine UACS: Try Reference first, fallback to items
+      const uacs =
+        d.references?.[0]?.uacsCode ||
+        d.items.map((i) => i.accountCode).join(", ");
 
-    // Assuming approvedAt signifies the completion/submission date
-    if (d.approvedAt) {
-      if (d.lddapMthd === "MANUAL") {
-        manualDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
-      } else if (d.lddapMthd === "ONLINE") {
-        onlineDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+      // Determine Refs
+      const adaNo = d.lddapNum || "";
+      const dvNo = d.references?.[0]?.dvNum || "";
+      const orsNo = d.references?.[0]?.orsNum || "";
+      const respCode = d.references?.[0]?.respCode || "";
+
+      // Processing Dates Logic
+      let manualDate = "";
+      let onlineDate = "";
+      let daysProcessed = "";
+
+      // Assuming approvedAt signifies the completion/submission date
+      if (d.approvedAt) {
+        if (d.lddapMthd === "MANUAL") {
+          manualDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+        } else if (d.lddapMthd === "ONLINE") {
+          onlineDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+        }
+
+        if (d.dateReceived) {
+          daysProcessed = differenceInDays(
+            new Date(d.approvedAt),
+            new Date(d.dateReceived),
+          );
+        }
       }
 
-      if (d.dateReceived) {
-        daysProcessed = differenceInDays(
-          new Date(d.approvedAt),
-          new Date(d.dateReceived),
-        );
-      }
+      rowValues = [
+        d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date
+        adaNo, // ADA
+        dvNo, // DV
+        orsNo, // ORS
+        respCode, // RCC
+        d.payee?.name || "", // Payee
+        uacs, // UACS
+        d.projectName || "", // Project
+        d.particulars || "", // Nature
+        Number(d.netAmount), // Amount
+        d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date Received
+        manualDate, // Manual Date
+        onlineDate, // Online Date
+        daysProcessed, // Days Processed
+      ];
+
+      // Add to Total
+      totalAmount += Number(d.netAmount);
     }
-
-    const rowValues = [
-      d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date
-      adaNo, // ADA
-      dvNo, // DV
-      orsNo, // ORS
-      respCode, // RCC
-      d.payee?.name || "", // Payee
-      uacs, // UACS
-      d.projectName || "", // Project (New)
-      d.particulars || "", // Nature
-      Number(d.netAmount), // Amount
-      d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date Received (New)
-      manualDate, // Manual Date (New)
-      onlineDate, // Online Date (New)
-      daysProcessed, // Days Processed (New)
-    ];
 
     const row = worksheet.getRow(currentRowIdx);
     row.values = rowValues;
@@ -163,10 +191,14 @@ export const buildDebitReport = (worksheet, data) => {
       cell.alignment = { vertical: "middle", wrapText: true };
 
       // Align Amount Right (Column 10/J)
+      // Only apply number format if cell value is a number (skips blank cancelled rows)
       if (colNum === 10) {
-        cell.numFmt = "#,##0.00";
+        if (typeof cell.value === "number") {
+          cell.numFmt = "#,##0.00";
+        }
         cell.alignment = { vertical: "middle", horizontal: "right" };
       }
+
       // Align Dates/Codes Center
       // Columns: 1,2,3,4,5,7,8,11,12,13,14
       if ([1, 2, 3, 4, 5, 7, 8, 11, 12, 13, 14].includes(colNum)) {
@@ -174,7 +206,6 @@ export const buildDebitReport = (worksheet, data) => {
       }
     });
 
-    totalAmount += Number(d.netAmount);
     currentRowIdx++;
   });
 
@@ -209,9 +240,6 @@ export const buildDebitReport = (worksheet, data) => {
 
   //* Signature Block
   const sigRow = certStartRow + 5;
-  // Centering signature around the middle-right area (Columns G-J approx or shift to center relative to page)
-  // Expanded report width suggests shifting signature slightly right or keeping center.
-  // Middle of A-N (14 cols) is roughly G-H.
   worksheet.mergeCells(`F${sigRow}:I${sigRow}`);
   const sigName = worksheet.getCell(`F${sigRow}`);
   sigName.value = "<Name Here>";
@@ -244,13 +272,13 @@ export const buildCheckReport = (worksheet, data) => {
     { key: "rcc", width: 15 }, // E
     { key: "payee", width: 30 }, // F
     { key: "uacs", width: 15 }, // G
-    { key: "project", width: 20 }, // H (New)
+    { key: "project", width: 20 }, // H
     { key: "nature", width: 40 }, // I
     { key: "amount", width: 18 }, // J
-    { key: "date_received", width: 15 }, // K (New)
-    { key: "manual_date", width: 15 }, // L (New)
-    { key: "online_date", width: 15 }, // M (New)
-    { key: "days_processed", width: 10 }, // N (New)
+    { key: "date_received", width: 15 }, // K
+    { key: "manual_date", width: 15 }, // L
+    { key: "online_date", width: 15 }, // M
+    { key: "days_processed", width: 10 }, // N
   ];
 
   //* --- HEADER SECTION ---
@@ -280,8 +308,7 @@ export const buildCheckReport = (worksheet, data) => {
   worksheet.getCell("A6").value =
     `Entity Name: Department of Science and Technology - Region 1`;
   worksheet.getCell("A7").value = `Fund Cluster: ${fund.code} - ${fund.name}`;
-  worksheet.getCell("A8").value =
-    `Bank Name/Account No.: `;
+  worksheet.getCell("A8").value = `Bank Name/Account No.: `;
 
   worksheet.getCell("L6").value = `Report No.: ${reportNumber}`;
   worksheet.getCell("L7").value = `Sheet No.:`;
@@ -329,50 +356,75 @@ export const buildCheckReport = (worksheet, data) => {
   let totalAmount = 0;
 
   disbursements.forEach((d) => {
-    // Determine UACS
-    const uacs =
-      d.references?.[0]?.uacsCode ||
-      d.items.map((i) => i.accountCode).join(", ");
+    let rowValues = [];
 
-    // Determine Refs
-    const checkNo = d.checkNum || "";
-    const dvNo = d.references?.[0]?.dvNum || "";
-    const orsNo = d.references?.[0]?.orsNum || "";
-    const respCode = d.references?.[0]?.respCode || "";
+    if (d.status === "CANCELLED") {
+      rowValues = [
+        "-", // Date
+        d.checkNum || "", // Check Serial No (Retain Value)
+        "-", // DV
+        "-", // ORS
+        "-", // RCC
+        "CANCELLED", // Payee (Hardcoded)
+        "-", // UACS
+        "-", // Project
+        "-", // Nature
+        "-", // Amount (Blank)
+        "-", // Date Received
+        "-", // Manual Date
+        "-", // Online Date
+        "-", // Days Processed
+      ];
+      // Do not add to totalAmount
+    } else {
+      // --- STANDARD LOGIC ---
+      // Determine UACS
+      const uacs =
+        d.references?.[0]?.uacsCode ||
+        d.items.map((i) => i.accountCode).join(", ");
 
-    // Processing Dates Logic (Check Report Specific: Date always Online)
-    let manualDate = ""; // Checks don't use Manual LDDAP col
-    let onlineDate = "";
-    let daysProcessed = "";
+      // Determine Refs
+      const checkNo = d.checkNum || "";
+      const dvNo = d.references?.[0]?.dvNum || "";
+      const orsNo = d.references?.[0]?.orsNum || "";
+      const respCode = d.references?.[0]?.respCode || "";
 
-    if (d.approvedAt) {
-      // Logic: For Check Report, always populate Online column as requested
-      onlineDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+      // Processing Dates Logic
+      let manualDate = "";
+      let onlineDate = "";
+      let daysProcessed = "";
 
-      if (d.dateReceived) {
-        daysProcessed = differenceInDays(
-          new Date(d.approvedAt),
-          new Date(d.dateReceived),
-        );
+      if (d.approvedAt) {
+        // Logic: For Check Report, always populate Online column as requested
+        onlineDate = format(new Date(d.approvedAt), "MM/dd/yyyy");
+
+        if (d.dateReceived) {
+          daysProcessed = differenceInDays(
+            new Date(d.approvedAt),
+            new Date(d.dateReceived),
+          );
+        }
       }
-    }
 
-    const rowValues = [
-      d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date
-      checkNo, // Check Serial No
-      dvNo, // DV
-      orsNo, // ORS
-      respCode, // RCC
-      d.payee?.name || "", // Payee
-      uacs, // UACS
-      d.projectName || "", // Project (New)
-      d.particulars || "", // Nature
-      Number(d.netAmount), // Amount
-      d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date Received (New)
-      manualDate, // Manual Date (Empty)
-      onlineDate, // Online Date (Populated)
-      daysProcessed, // Days Processed
-    ];
+      rowValues = [
+        d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date
+        checkNo, // Check Serial No
+        dvNo, // DV
+        orsNo, // ORS
+        respCode, // RCC
+        d.payee?.name || "", // Payee
+        uacs, // UACS
+        d.projectName || "", // Project
+        d.particulars || "", // Nature
+        Number(d.netAmount), // Amount
+        d.dateReceived ? format(new Date(d.dateReceived), "MM/dd/yyyy") : "", // Date Received
+        manualDate, // Manual Date (Empty)
+        onlineDate, // Online Date (Populated)
+        daysProcessed, // Days Processed
+      ];
+
+      totalAmount += Number(d.netAmount);
+    }
 
     const row = worksheet.getRow(currentRowIdx);
     row.values = rowValues;
@@ -390,7 +442,9 @@ export const buildCheckReport = (worksheet, data) => {
 
       // Align Amount Right (Column 10/J)
       if (colNum === 10) {
-        cell.numFmt = "#,##0.00";
+        if (typeof cell.value === "number") {
+          cell.numFmt = "#,##0.00";
+        }
         cell.alignment = { vertical: "middle", horizontal: "right" };
       }
       // Align Dates/Codes Center
@@ -399,7 +453,6 @@ export const buildCheckReport = (worksheet, data) => {
       }
     });
 
-    totalAmount += Number(d.netAmount);
     currentRowIdx++;
   });
 

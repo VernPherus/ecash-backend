@@ -7,7 +7,8 @@ import {
   cashUtilization,
   totalNCA,
   totalProcessedDv,
-  totalCancelledDv,
+  totalCancelledLDDAP,
+  totalCancelledCheck,
 } from "../lib/formulas.js";
 import { getSystemTimeDetails } from "../lib/time.js";
 import { updateLedgerFromEntry, createYearlyLedgers } from "../lib/ledger.js";
@@ -59,7 +60,7 @@ export const newFund = async (req, res) => {
 
       // Create ledgers for the WHOLE year (Jan-Dec)
       await createYearlyLedgers(tx, fund.id, year, fund.initialBalance);
-      
+
       // Create log
       await createLog(
         tx,
@@ -229,7 +230,8 @@ export const displayFundStats = async (req, res) => {
         const totalMonthly = await totalMonthBalance(fund.id, month);
         const totalCashUtil = await cashUtilization(fund.id, month);
         const processedDVNum = await totalProcessedDv(fund.id, month);
-        const cancelledDVNum = await totalCancelledDv(fund.id, month);
+        const cancelledLDDAP = await totalCancelledLDDAP(fund.id, month);
+        const cancelledCheck = await totalCancelledCheck(fund.id, month);
 
         return {
           fundId: fund.id,
@@ -238,7 +240,8 @@ export const displayFundStats = async (req, res) => {
           totalMonthly,
           totalCashUtil,
           processedDVNum,
-          cancelledDVNum,
+          cancelledLDDAP: cancelledLDDAP,
+          cancelledCheck: cancelledCheck,
         };
       }),
     );

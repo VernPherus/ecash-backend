@@ -266,7 +266,7 @@ export const storeRec = async (req, res) => {
       return record;
     });
 
-    // * Send Confirmation email
+    // * Send confirmation email
     if (
       shouldSendMail &&
       newDisbursement.status === Status.PAID &&
@@ -294,10 +294,13 @@ export const storeRec = async (req, res) => {
         newDisbursement.checkNum ||
         `REF-${newDisbursement.id}`;
 
+      const safeDvNum = dvNum || "";
+
       sendConfirmationEmail(newDisbursement.payee.email, {
         payeeName: newDisbursement.payee.name,
         amount: formattedAmount,
         referenceNumber: referenceNumber,
+        dvNum: safeDvNum, 
         date: formattedDate,
         purpose: newDisbursement.particulars || "Disbursement Payment",
       }).catch((err) => console.error("Background Email Error:", err));

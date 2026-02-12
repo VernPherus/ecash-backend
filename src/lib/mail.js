@@ -131,10 +131,18 @@ export const sendConfirmationEmail = async (to, details) => {
                       <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
                         <tr>
                           <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
-                            <span style="color: #64748b; font-size: 14px;">Reference No.</span>
+                            <span style="color: #64748b; font-size: 14px;">LDDAP/Check Code:</span>
                           </td>
                           <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
                             <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.referenceNumber}</span>
+                          </td>
+                        </tr>
+                                                <tr>
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                            <span style="color: #64748b; font-size: 14px;">DV Number: </span>
+                          </td>
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                            <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.dvnum}</span>
                           </td>
                         </tr>
                         <tr>
@@ -155,9 +163,9 @@ export const sendConfirmationEmail = async (to, details) => {
                         </tr>
                          <tr>
                           <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
-                            <span style="color: #64748b; font-size: 14px;">Purpose</span>
+                            <span style="color: #64748b; font-size: 14px;">Particulars</span>
                           </td>
-                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: left;">
                             <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.purpose}</span>
                           </td>
                         </tr>
