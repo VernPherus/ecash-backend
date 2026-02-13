@@ -12,6 +12,7 @@ const transporter = nodemailer.createTransport({
 
 const MAIL_FROM_ADDRESS = process.env.EMAIL_USER;
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME;
+const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL;
 const securityEmail = `"${MAIL_FROM_NAME} - Security" <${MAIL_FROM_ADDRESS}>`;
 const senderEmail = `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`;
 
@@ -131,7 +132,23 @@ export const sendConfirmationEmail = async (to, details) => {
                       <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
                         <tr>
                           <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
-                            <span style="color: #64748b; font-size: 14px;">LDDAP/Check Code:</span>
+                            <span style="color: #64748b; font-size: 14px;">Fund Source:</span>
+                          </td>
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                            <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.fundSource}</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                            <span style="color: #64748b; font-size: 14px;">Project:</span>
+                          </td>
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                            <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.projectName}</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                            <span style="color: #64748b; font-size: 14px;">LDDAP/Check Number:</span>
                           </td>
                           <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
                             <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.referenceNumber}</span>
@@ -142,7 +159,7 @@ export const sendConfirmationEmail = async (to, details) => {
                             <span style="color: #64748b; font-size: 14px;">DV Number: </span>
                           </td>
                           <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; text-align: right;">
-                            <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.dvnum}</span>
+                            <span style="color: #1e293b; font-weight: 600; font-size: 14px;">${details.dvNum}</span>
                           </td>
                         </tr>
                         <tr>

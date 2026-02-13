@@ -300,9 +300,11 @@ export const storeRec = async (req, res) => {
         payeeName: newDisbursement.payee.name,
         amount: formattedAmount,
         referenceNumber: referenceNumber,
-        dvNum: safeDvNum, 
+        dvNum: safeDvNum,
         date: formattedDate,
         purpose: newDisbursement.particulars || "Disbursement Payment",
+        projectName: newDisbursement.projectName,
+        fundSource: newDisbursement.fundSource.name,
       }).catch((err) => console.error("Background Email Error:", err));
     }
 
@@ -361,6 +363,7 @@ export const displayRec = async (req, res) => {
         { payee: { name: { contains: search, mode: "insensitive" } } },
         { lddapNum: { contains: search, mode: "insensitive" } },
         { checkNum: { contains: search, mode: "insensitive" } },
+        { projectName: { contains: search, mode: "insensitive" } },
         {
           references: {
             some: {
@@ -446,9 +449,6 @@ export const showRec = async (req, res) => {
   }
 };
 
-/**
- * * EDIT RECORD
- */
 /**
  * * EDIT RECORD
  */
