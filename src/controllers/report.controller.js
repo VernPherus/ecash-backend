@@ -38,7 +38,7 @@ export const generateDebitReport = async (req, res) => {
       where: {
         fundSourceId: Number(fundId),
         method: "LDDAP", // Strict filter for Debit Report
-        status: Status.PAID, // Ensure only valid records
+        status: { in: [Status.PAID, Status.CANCELLED] }, // Ensure only valid records
         dateReceived: {
           gte: startDate,
           lte: endDate,
@@ -65,7 +65,7 @@ export const generateDebitReport = async (req, res) => {
       endDate,
       fund,
       disbursements,
-      reportNumber: `${year}-${month}-001`, // Logic can be improved
+      reportNumber: `${year}-${month}`,
     };
 
     buildDebitReport(worksheet, reportData);
@@ -122,7 +122,7 @@ export const generateCheckReport = async (req, res) => {
       where: {
         fundSourceId: Number(fundId),
         method: "CHECK", // Strict filter for Check Report
-        status: Status.PAID,
+        status: { in: [Status.PAID, Status.CANCELLED] },
         dateReceived: {
           gte: startDate,
           lte: endDate,

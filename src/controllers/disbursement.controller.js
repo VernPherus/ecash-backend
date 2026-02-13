@@ -72,11 +72,17 @@ const updateLedger = async (tx, fundSourceId, dateReceived) => {
 };
 
 /**
- * * GENERATE LDDAP CODE
+ * * GENERATE LDDAP SERIES CODE
  */
 export const generateLDDAPCode = async (req, res) => {
+  const { date, seriesCode } = req.body;
+
   try {
-    const lddapCode = await genLDDAPCode();
+    if (!date || !seriesCode) {
+      return res.status(400).json({ message: "Date and series code required" });
+    }
+
+    const lddapCode = await genLDDAPCode(date, seriesCode);
     res.status(200).json({ lddapCode });
   } catch (error) {
     console.log("Error in the genLDDAPCode controller: " + error);
@@ -85,7 +91,10 @@ export const generateLDDAPCode = async (req, res) => {
 };
 
 /**
- * * STORE RECORD
+ * * STORE REQCORD: Validates disbursement input, initiates transaction, creates log, sends notification and email after successful storing
+ * @param {*} req
+ * @param {*} res
+ * @returns
  */
 export const storeRec = async (req, res) => {
   const {
@@ -93,6 +102,8 @@ export const storeRec = async (req, res) => {
     fundsourceId,
     lddapNum,
     checkNum,
+    projectName,
+    ncaNum,
     particulars,
     method,
     lddapMethod,
@@ -113,10 +124,11 @@ export const storeRec = async (req, res) => {
 
   const userId = req.user?.id;
 
-  // * Handle boolean flag safely (handles "true", true, "false", false, undefined)
+  // * Handle boolean flag safely
   const shouldSendMail = String(sendMail) === "true";
 
   try {
+    // 1. Basic Validation
     if (!payeeId || !fundsourceId) {
       return res
         .status(400)
@@ -139,6 +151,35 @@ export const storeRec = async (req, res) => {
         .json({ message: "At least one item is required." });
     }
 
+    // 2. Uniqueness Check (LDDAP & Check Number)
+    const uniqueConditions = [];
+    if (lddapNum && String(lddapNum).trim() !== "") {
+      uniqueConditions.push({ lddapNum: String(lddapNum).trim() });
+    }
+    if (checkNum && String(checkNum).trim() !== "") {
+      uniqueConditions.push({ checkNum: String(checkNum).trim() });
+    }
+
+    if (uniqueConditions.length > 0) {
+      const existingRecord = await prisma.disbursement.findFirst({
+        where: {
+          deletedAt: null, // Only check active records
+          OR: uniqueConditions,
+        },
+      });
+
+      if (existingRecord) {
+        const conflictField =
+          existingRecord.lddapNum === lddapNum
+            ? `LDDAP Number (${lddapNum})`
+            : `Check Number (${checkNum})`;
+        return res
+          .status(409)
+          .json({ message: `${conflictField} already exists.` });
+      }
+    }
+
+    // 3. Calculation
     const calculatedGross = calculateGross(items);
     const calculatedDeductions = calculateDeductions(deductions);
     const calculatedNet = calculatedGross - calculatedDeductions;
@@ -146,7 +187,7 @@ export const storeRec = async (req, res) => {
     // Determine Status (Default to PAID if not specified)
     const recordStatus = status || Status.PAID;
 
-    // Determine Approved Date (If PAID but no date provided, default to Now)
+    // Determine Approved Date
     let finalApprovedAt = approvedAt ? new Date(approvedAt) : null;
     if (recordStatus === Status.PAID && !finalApprovedAt) {
       finalApprovedAt = new Date();
@@ -159,6 +200,8 @@ export const storeRec = async (req, res) => {
           fundSourceId: Number(fundsourceId),
           lddapNum,
           checkNum,
+          projectName,
+          ncaNum,
           particulars,
           method,
           lddapMthd: lddapMethod,
@@ -223,8 +266,7 @@ export const storeRec = async (req, res) => {
       return record;
     });
 
-    // * Send Confirmation email
-    // LOGIC FIX: Only send if user requested IT AND the record is actually PAID.
+    // * Send confirmation email
     if (
       shouldSendMail &&
       newDisbursement.status === Status.PAID &&
@@ -252,13 +294,17 @@ export const storeRec = async (req, res) => {
         newDisbursement.checkNum ||
         `REF-${newDisbursement.id}`;
 
-      // We don't await this to prevent blocking the response if email server is slow
+      const safeDvNum = dvNum || "";
+
       sendConfirmationEmail(newDisbursement.payee.email, {
         payeeName: newDisbursement.payee.name,
         amount: formattedAmount,
         referenceNumber: referenceNumber,
+        dvNum: safeDvNum,
         date: formattedDate,
         purpose: newDisbursement.particulars || "Disbursement Payment",
+        projectName: newDisbursement.projectName,
+        fundSource: newDisbursement.fundSource.name,
       }).catch((err) => console.error("Background Email Error:", err));
     }
 
@@ -317,6 +363,7 @@ export const displayRec = async (req, res) => {
         { payee: { name: { contains: search, mode: "insensitive" } } },
         { lddapNum: { contains: search, mode: "insensitive" } },
         { checkNum: { contains: search, mode: "insensitive" } },
+        { projectName: { contains: search, mode: "insensitive" } },
         {
           references: {
             some: {
@@ -341,6 +388,7 @@ export const displayRec = async (req, res) => {
         select: {
           id: true,
           dateReceived: true,
+          projectName: true,
           netAmount: true,
           status: true,
           method: true,
@@ -413,6 +461,8 @@ export const editRec = async (req, res) => {
     fundSourceId,
     lddapNum,
     checkNum,
+    projectName,
+    ncaNum,
     particulars,
     method,
     lddapMethod,
@@ -440,6 +490,37 @@ export const editRec = async (req, res) => {
       return res.status(404).json({ message: "Disbursement not found." });
     }
 
+    // 1. Uniqueness Check (LDDAP & Check Number)
+    // We must check if these exist in OTHER records (not the one we are editing)
+    const uniqueConditions = [];
+    if (lddapNum && String(lddapNum).trim() !== "") {
+      uniqueConditions.push({ lddapNum: String(lddapNum).trim() });
+    }
+    if (checkNum && String(checkNum).trim() !== "") {
+      uniqueConditions.push({ checkNum: String(checkNum).trim() });
+    }
+
+    if (uniqueConditions.length > 0) {
+      const existingRecord = await prisma.disbursement.findFirst({
+        where: {
+          deletedAt: null,
+          id: { not: Number(id) }, // Exclude current record
+          OR: uniqueConditions,
+        },
+      });
+
+      if (existingRecord) {
+        const conflictField =
+          existingRecord.lddapNum === lddapNum
+            ? `LDDAP Number (${lddapNum})`
+            : `Check Number (${checkNum})`;
+        return res
+          .status(409)
+          .json({ message: `${conflictField} already exists.` });
+      }
+    }
+
+    // 2. Prepare Calculations
     let newGross = Number(currentRecord.grossAmount);
     let newTotalDeductions = Number(currentRecord.totalDeductions);
     let itemsUpdateOp = undefined;
@@ -479,6 +560,7 @@ export const editRec = async (req, res) => {
 
     const newNet = newGross - newTotalDeductions;
 
+    // 3. Database Transaction
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const record = await tx.disbursement.update({
         where: { id: Number(id) },
@@ -487,6 +569,8 @@ export const editRec = async (req, res) => {
           fundSourceId: fundSourceId ? Number(fundSourceId) : undefined,
           lddapNum,
           checkNum,
+          projectName,
+          ncaNum,
           particulars,
           method,
           lddapMthd: lddapMethod,
@@ -555,7 +639,7 @@ export const editRec = async (req, res) => {
       return record;
     });
 
-    io.emit("disbusrement_updates", { type: "UPDATE", data: updatedRecord });
+    io.emit("disbursement_updates", { type: "UPDATE", data: updatedRecord });
     res.status(200).json(updatedRecord);
   } catch (error) {
     console.log("Error in editRec controller: ", error.message);
@@ -586,6 +670,10 @@ export const approveRec = async (req, res) => {
 
     if (!record) {
       return res.status(404).json({ message: "Disbursement not found." });
+    }
+
+    if (record.status === Status.CANCELLED) {
+      return res.status(409).json({ message: "Record is cancelled." });
     }
 
     if (record.status === Status.PAID) {
@@ -680,6 +768,71 @@ export const approveRec = async (req, res) => {
 };
 
 /**
+ * * CANCEL RECORD: Updates disbursement status into "CANCELLED"
+ * @param {*} req
+ * @param {*} res
+ * @returns
+ */
+export const cancelRec = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user?.id;
+
+  try {
+    if (!id) {
+      return res.status(400).json({ message: "Disbursement ID required" });
+    }
+    if (!userId) {
+      return res.status(400).json({ message: "Unauthorized." });
+    }
+
+    const cancelledRecord = await prisma.$transaction(async (tx) => {
+      // Check if record exists and is cancellable
+      const existingRecord = await tx.disbursement.findUnique({
+        where: { id: Number(id) },
+      });
+
+      if (!existingRecord) {
+        throw new Error("RECORD_NOT_FOUND");
+      }
+
+      // Prevent cancelling already cancelled records
+      if (existingRecord.status === "CANCELLED") {
+        throw new Error("ALREADY_CANCELLED");
+      }
+
+      const record = await tx.disbursement.update({
+        where: { id: Number(id) },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+
+      await createLog(tx, userId, `Cancelled disbursement #${record.id}`);
+
+      return record;
+    });
+
+    io.emit("disbursement_updates", {
+      type: "UPDATE",
+      data: cancelledRecord,
+    });
+    res.status(200).json(cancelledRecord);
+  } catch (error) {
+    console.error("Error in cancelReq controller: " + error.message);
+
+    if (error.message === "RECORD_NOT_FOUND") {
+      return res.status(404).json({ message: "Disbursement not found" });
+    }
+    if (error.message === "ALREADY_CANCELLED") {
+      return res
+        .status(400)
+        .json({ message: "Disbursement already cancelled" });
+    }
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
  * * REMOVE RECORD
  */
 export const removeRec = async (req, res) => {
@@ -738,7 +891,7 @@ export const removeRec = async (req, res) => {
       id: Number(id),
     });
   } catch (error) {
-    console.log("Error in removeRec controller: " + error.message);
+    console.error("Error in removeRec controller: " + error.message);
     return res.status(500).json({ message: "Internal server error." });
   }
 };

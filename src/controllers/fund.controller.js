@@ -6,8 +6,12 @@ import {
   totalMonthBalance,
   cashUtilization,
   totalNCA,
+  totalProcessedDv,
+  totalCancelledLDDAP,
+  totalCancelledCheck,
 } from "../lib/formulas.js";
 import { getSystemTimeDetails } from "../lib/time.js";
+import { updateLedgerFromEntry, createYearlyLedgers } from "../lib/ledger.js";
 
 /**
  * * NEW FUND: Create fund source and initializes the fund ledger
@@ -16,15 +20,16 @@ import { getSystemTimeDetails } from "../lib/time.js";
  * @returns
  */
 export const newFund = async (req, res) => {
-  const { code, name, initialBalance, description, reset } = req.body;
+  const { code, seriesCode, name, initialBalance, description, reset } =
+    req.body;
   const userId = req.user?.id;
 
   try {
     //* Validation
-    if (!code || !name) {
+    if (!code || !name || !seriesCode) {
       return res
         .status(400)
-        .json({ message: "Fund Code and Name are required." });
+        .json({ message: "Fund Code, Name, and Series Code are required." });
     }
 
     //* Check for duplicates
@@ -42,6 +47,7 @@ export const newFund = async (req, res) => {
       const fund = await tx.fundSource.create({
         data: {
           code,
+          seriesCode,
           name,
           initialBalance: initialBalance || 0,
           description,
@@ -49,26 +55,11 @@ export const newFund = async (req, res) => {
         },
       });
 
-      // Dates for ledger
-      const { year, month } = getSystemTimeDetails();
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
+      // Get current year
+      const { year } = getSystemTimeDetails();
 
-      // Create initial ledger
-      await tx.fundLedger.create({
-        data: {
-          fundSourceId: fund.id,
-          year: year,
-          period: month,
-          startDate: startDate,
-          endDate: endDate,
-          startingBalance: fund.initialBalance,
-          endingBalance: fund.initialBalance,
-          totalEntry: 0,
-          totalDisbursed: 0,
-          status: LedgerStatus.OPEN,
-        },
-      });
+      // Create ledgers for the WHOLE year (Jan-Dec)
+      await createYearlyLedgers(tx, fund.id, year, fund.initialBalance);
 
       // Create log
       await createLog(
@@ -92,7 +83,7 @@ export const newFund = async (req, res) => {
  * @param {*} res
  */
 export const newEntry = async (req, res) => {
-  const { sourceId, name, amount } = req.body;
+  const { sourceId, name, amount, enteredAt } = req.body;
   const userId = req.user?.id;
 
   try {
@@ -111,12 +102,17 @@ export const newEntry = async (req, res) => {
       if (!fund) {
         throw new Error("Fund source not found");
       }
+
+      // Determine effective date (use enteredAt if provided, otherwise now)
+      const entryDate = enteredAt ? new Date(enteredAt) : new Date();
+
       // Create entry
       const entry = await tx.fundEntry.create({
         data: {
           fundSourceId: Number(sourceId),
           name: name,
           amount: Number(amount),
+          enteredAt: entryDate,
         },
         include: {
           fundSource: {
@@ -127,6 +123,9 @@ export const newEntry = async (req, res) => {
           },
         },
       });
+
+      // Update Ledger based on the entry date
+      await updateLedgerFromEntry(tx, Number(sourceId), entryDate);
 
       // Create log
       await createLog(
@@ -230,6 +229,9 @@ export const displayFundStats = async (req, res) => {
         const totalDisbursement = await totalDisb(fund.id, month);
         const totalMonthly = await totalMonthBalance(fund.id, month);
         const totalCashUtil = await cashUtilization(fund.id, month);
+        const processedDVNum = await totalProcessedDv(fund.id, month);
+        const cancelledLDDAP = await totalCancelledLDDAP(fund.id, month);
+        const cancelledCheck = await totalCancelledCheck(fund.id, month);
 
         return {
           fundId: fund.id,
@@ -237,6 +239,9 @@ export const displayFundStats = async (req, res) => {
           totalDisbursement,
           totalMonthly,
           totalCashUtil,
+          processedDVNum,
+          cancelledLDDAP: cancelledLDDAP,
+          cancelledCheck: cancelledCheck,
         };
       }),
     );
@@ -497,7 +502,8 @@ export const resetFund = async (req, res) => {
  */
 export const editFund = async (req, res) => {
   const { id } = req.params;
-  const { code, name, initialBalance, description, reset } = req.body;
+  const { code, seriesCode, name, initialBalance, description, reset } =
+    req.body;
   const userId = req.user?.id;
 
   try {
@@ -534,6 +540,7 @@ export const editFund = async (req, res) => {
         },
         data: {
           code,
+          seriesCode,
           name,
           initialBalance:
             initialBalance !== undefined ? Number(initialBalance) : undefined,
@@ -634,11 +641,23 @@ export const deactivateFund = async (req, res) => {
         },
       });
 
+      // Close all OPEN ledgers associated with this fund
+      await tx.fundLedger.updateMany({
+        where: {
+          fundSourceId: Number(id),
+          status: LedgerStatus.OPEN,
+        },
+        data: {
+          status: LedgerStatus.CLOSED,
+          updatedAt: new Date(),
+        },
+      });
+
       // Create Audit Log
       await createLog(
         tx,
         userId,
-        `Deactivated Fund Source: ${fundToCheck.code} - ${fundToCheck.name}`,
+        `Deactivated Fund Source: ${fundToCheck.code} - ${fundToCheck.name}. Closed all associated open ledgers.`,
       );
     });
 
@@ -685,6 +704,10 @@ export const deleteEntry = async (req, res) => {
         where: { id: Number(entryId) },
         data: { deletedAt: new Date() },
       });
+
+      // Update Ledger based on the entry's original date (enteredAt or createdAt)
+      const entryDate = entryToCheck.enteredAt || entryToCheck.createdAt;
+      await updateLedgerFromEntry(tx, entryToCheck.fundSourceId, entryDate);
 
       // Create Audit log:
       const logMessage = `Deleted allocation entry "${entryToCheck.name}"(${entryToCheck.amount}) from Fund ${entryToCheck.fundSource?.code}`;

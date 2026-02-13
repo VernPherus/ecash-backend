@@ -5,6 +5,7 @@ import {
   showRec,
   editRec,
   approveRec,
+  cancelRec,
   removeRec,
   generateLDDAPCode,
 } from "../controllers/disbursement.controller.js";
@@ -34,7 +35,7 @@ router.get(
   showRec,
 );
 
-router.get(
+router.post(
   "/genlddapcode",
   protectRoute,
   authorize(["ADMIN", "STAFF"]),
@@ -54,6 +55,12 @@ router.put(
   protectRoute,
   authorize(["ADMIN", "STAFF"]),
   approveRec,
+);
+router.put(
+  "/cancel/:id",
+  protectRoute,
+  authorize(["ADMIN", "STAFF"]),
+  cancelRec,
 );
 router.put(
   "/delete/:id",

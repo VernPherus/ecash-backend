@@ -22,6 +22,7 @@ export const LddapMethod = {
 export const Status = {
   PAID: "PAID",
   PENDING: "PENDING",
+  CANCELLED: "CANCELLED",
 };
 
 export const Reset = {

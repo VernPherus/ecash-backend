@@ -102,7 +102,7 @@ export const totalNCA = async (fundId, input) => {
     _sum: { amount: true },
     where: {
       fundSourceId: fundId,
-      createdAt: { gte: startDate, lte: endDate },
+      enteredAt: { gte: startDate, lte: endDate },
       deletedAt: null,
     },
   });
@@ -176,4 +176,63 @@ export const cashUtilization = async (fundId, month) => {
 
   const utilization = (disb / nca) * 100;
   return Number(utilization.toFixed(2));
+};
+
+export const totalProcessedDv = async (fundId, month) => {
+  const { year, month: currentMonth } = getSystemTimeDetails();
+  const targetMonth = month || currentMonth;
+
+  const startDate = new Date(year, targetMonth - 1, 1);
+  const endDate = new Date(year, targetMonth, 0, 23, 59, 59, 999);
+
+  const processedCount = await prisma.disbursement.count({
+    where: {
+      fundSourceId: fundId,
+      dateReceived: { gte: startDate, lte: endDate },
+      status: "PAID",
+      deletedAt: null,
+    },
+  });
+
+  return processedCount;
+};
+
+export const totalCancelledLDDAP = async (fundId, month) => {
+  const { year, month: currentMonth } = getSystemTimeDetails();
+  const targetMonth = month || currentMonth;
+
+  const startDate = new Date(year, targetMonth - 1, 1);
+  const endDate = new Date(year, targetMonth, 0, 23, 59, 59, 999);
+
+  const cancelledCount = await prisma.disbursement.count({
+    where: {
+      fundSourceId: fundId,
+      method: "LDDAP",
+      dateReceived: { gte: startDate, lte: endDate },
+      status: "CANCELLED",
+      deletedAt: null,
+    },
+  });
+
+  return cancelledCount;
+};
+
+export const totalCancelledCheck = async (fundId, month) => {
+  const { year, month: currentMonth } = getSystemTimeDetails();
+  const targetMonth = month || currentMonth;
+
+  const startDate = new Date(year, targetMonth - 1, 1);
+  const endDate = new Date(year, targetMonth, 0, 23, 59, 59, 999);
+
+  const cancelledCount = await prisma.disbursement.count({
+    where: {
+      fundSourceId: fundId,
+      method: "CHECK",
+      dateReceived: { gte: startDate, lte: endDate },
+      status: "CANCELLED",
+      deletedAt: null,
+    },
+  });
+
+  return cancelledCount;
 };

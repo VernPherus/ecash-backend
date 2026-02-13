@@ -22,7 +22,6 @@ export const initScheduler = () => {
     console.log("Running Monthly Maintenance Tasks...");
     try {
       await performFundReset();
-      await createMonthlyLedgers();
       await sendAuditNotification();
     } catch (error) {
       console.error("Scheduler error: ", error);
@@ -170,31 +169,18 @@ export const performFundReset = async () => {
   for (const fund of fundsToReset) {
     try {
       await prisma.$transaction(async (tx) => {
-        // Calculate carry-over balance for this specific fund
-        const carryOverBalance = await totalMonthBalance(fund.id);
-
-        // Validate the balance is a valid number
-        if (
-          carryOverBalance === null ||
-          carryOverBalance === undefined ||
-          isNaN(Number(carryOverBalance))
-        ) {
-          throw new Error(
-            `Invalid carry-over balance for fund ${fund.code}: ${carryOverBalance}`,
-          );
-        }
 
         // Update the fund's initial balance
         await tx.fundSource.update({
           where: { id: fund.id },
-          data: { initialBalance: carryOverBalance },
+          data: { initialBalance: 0 },
         });
 
         // Log individual fund reset
         await tx.logs.create({
           data: {
             userId: 1, // System user
-            log: `SYSTEM AUTO-RESET: Fund ${fund.code} reset to ${carryOverBalance}`,
+            log: `SYSTEM AUTO-RESET: Fund ${fund.code} reset to 0`,
           },
         });
       });
@@ -202,7 +188,7 @@ export const performFundReset = async () => {
       successCount++;
       console.log(`✅ Reset fund ${fund.code}`);
     } catch (error) {
-      console.error(`❌ Failed to reset fund ${fund.code}:`, error);
+      console.error(` Failed to reset fund ${fund.code}:`, error);
       errors.push({
         fundId: fund.id,
         fundCode: fund.code,
