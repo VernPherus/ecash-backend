@@ -12,7 +12,7 @@ import { createLog } from "../lib/auditLogger.js";
  * @param {object} res
  */
 export const signup = async (req, res) => {
-  const { username, firstName, lastName, email, password } = req.body;
+  const { username, firstName, lastName, email, password, userRole } = req.body;
 
   try {
     //* Check for empty fields
@@ -46,6 +46,7 @@ export const signup = async (req, res) => {
           lastName,
           email,
           password: hashedPassword,
+          role: userRole,
         },
       });
 
