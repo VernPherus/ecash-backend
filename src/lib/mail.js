@@ -12,7 +12,10 @@ const transporter = nodemailer.createTransport({
 
 const MAIL_FROM_ADDRESS = process.env.EMAIL_USER;
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME;
+
+// Delegate email
 const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL;
+
 const securityEmail = `"${MAIL_FROM_NAME} - Security" <${MAIL_FROM_ADDRESS}>`;
 const senderEmail = `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`;
 
