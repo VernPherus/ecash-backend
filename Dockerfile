@@ -32,6 +32,9 @@ FROM node:24-bookworm-slim AS production
 
 WORKDIR /app
 
+# Install OpenSSL — required by Prisma's query engine at runtime
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # Copy package manifest and install production deps only
 COPY package*.json ./
 RUN npm install --omit=dev
