@@ -4,11 +4,6 @@ import { PrismaClient } from "../generated/prisma/client.ts";
 
 import {
   Role,
-  Method,
-  PayeeType,
-  LddapMethod,
-  Status,
-  Reset,
 } from "../lib/constants.js";
 
 import bcrypt from "bcryptjs";
@@ -17,22 +12,6 @@ const connectionString = `${process.env.DATABASE_URL}`;
 
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
-
-//* Helper to generate a random date between start and end
-function getRandomDate(start, end) {
-  return new Date(
-    start.getTime() + Math.random() * (end.getTime() - start.getTime()),
-  );
-}
-
-//* Helper to get random integer
-function getRandomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-//* Generate random code for references
-const genCode = (prefix) =>
-  `${prefix}-${getRandomInt(2024, 2025)}-${getRandomInt(1000, 9999)}`;
 
 async function main() {
   console.log("Starting database seed...");
@@ -82,6 +61,8 @@ async function main() {
     },
   });
 
+  console.log(`Admin user created/updated with ID: ${admin.id}`);
+
   const staff = await prisma.user.upsert({
     where: { email: "staff@ecash.com" },
     update: {
@@ -100,6 +81,8 @@ async function main() {
     },
   });
 
+  console.log(`Staff user created/updated with ID: ${staff.id}`);
+
   const encoder = await prisma.user.upsert({
     where: { email: "user@ecash.com" },
     update: {
@@ -117,10 +100,9 @@ async function main() {
       role: Role.USER,
     },
   });
-
+  console.log(`User created/updated with ID: ${encoder.id}`);
   console.log("Users created including default System user.");
 
-  console.log("Logs created.");
   console.log("");
   console.log("Seeding completed successfully!");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
