@@ -163,11 +163,11 @@ export const displayFund = async (req, res) => {
     // Dynamic Where Clause for Search
     const where = search
       ? {
-          OR: [
-            { code: { contains: search, mode: "insensitive" } },
-            { name: { contains: search, mode: "insensitive" } },
-          ],
-        }
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" } },
+        ],
+      }
       : {};
 
     // Transaction to get count and data efficiently
@@ -677,7 +677,7 @@ export const deactivateFund = async (req, res) => {
  * @param {*} res
  */
 export const deleteEntry = async (req, res) => {
-  const { entryId } = req.params;
+  const { id: entryId } = req.params;
   const userId = req.user?.id;
 
   try {

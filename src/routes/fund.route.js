@@ -67,6 +67,6 @@ router.put(
   authorize(["STAFF", "ADMIN"]),
   deactivateFund,
 );
-router.put("/deleteEntry/:id", authorize(["STAFF", "AUTHORIZE"], deleteEntry));
+router.put("/deleteEntry/:id", protectRoute, authorize(["STAFF", "ADMIN"]), deleteEntry);
 
 export default router;
