@@ -279,15 +279,15 @@ export const storeRec = async (req, res) => {
 
       const formattedDate = newDisbursement.approvedAt
         ? new Date(newDisbursement.approvedAt).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          })
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
         : new Date().toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          });
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
 
       const referenceNumber =
         newDisbursement.lddapNum ||
@@ -699,13 +699,11 @@ export const approveRec = async (req, res) => {
       });
 
       if (userId) {
-        const logMessage = `APPROVED Disbursement #${id} | Payee: ${
-          record.payee?.name || "N/A"
-        } | Fund: ${record.fundSource?.code || "N/A"} | Net Amount: ₱${Number(
-          record.netAmount,
-        ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}${
-          remarks ? ` | Remarks: ${remarks}` : ""
-        }`;
+        const logMessage = `APPROVED Disbursement #${id} | Payee: ${record.payee?.name || "N/A"
+          } | Fund: ${record.fundSource?.code || "N/A"} | Net Amount: ₱${Number(
+            record.netAmount,
+          ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}${remarks ? ` | Remarks: ${remarks}` : ""
+          }`;
 
         await tx.logs.create({
           data: { userId: userId, log: logMessage },
@@ -868,9 +866,8 @@ export const removeRec = async (req, res) => {
         },
       });
 
-      const logDescription = `Deleted disbusrement #${id} (${
-        recordToCheck.payee?.name || "Unknown Payee"
-      })`;
+      const logDescription = `Deleted disbusrement #${id} (${recordToCheck.payee?.name || "Unknown Payee"
+        })`;
       await createLog(tx, userId, logDescription);
 
       // * UPDATE LEDGER
@@ -884,7 +881,7 @@ export const removeRec = async (req, res) => {
       }
     });
 
-    io.emit("disbursement_updates", { type: "UPDATE" });
+    io.emit("disbursement_updates", { type: "DELETE", id: Number(id) });
 
     res.status(200).json({
       message: "Disbursement record removed successfully.",
