@@ -338,7 +338,9 @@ export const displayEntry = async (req, res) => {
 
   try {
     // Filter by specific fund if provided
-    const where = fundId ? { fundSourceId: Number(fundId) } : {};
+    const where = fundId
+      ? { fundSourceId: Number(fundId), deletedAt: null }
+      : { deletedAt: null };
 
     const [totalRecords, entries] = await prisma.$transaction([
       prisma.fundEntry.count({ where }),
