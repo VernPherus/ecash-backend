@@ -1,0 +1,25 @@
+# Dependencies — installed fresh inside the image
+node_modules
+
+# Environment secrets — injected at runtime via -e / --env-file
+.env
+.env.*
+
+# Generated Prisma client — generated fresh inside the image
+src/generated
+
+# Build backup files
+*.bak
+
+# Logs
+*.log
+logs
+
+# Editor / OS artefacts
+.vscode
+.idea
+.DS_Store
+
+# Git
+.git
+.gitignore
