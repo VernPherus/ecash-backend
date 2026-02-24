@@ -107,19 +107,20 @@ export const totalNCA = async (fundId, input) => {
     },
   });
 
-  // Initial amount
-  const fundsAgg = await prisma.fundSource.aggregate({
-    _sum: { initialBalance: true },
+  // Read starting balance for this period from the FundLedger (historically correct per-month value)
+  const ledger = await prisma.fundLedger.findUnique({
     where: {
-      id: fundId,
-      createdAt: { gte: startDate, lte: endDate },
-      isActive: true,
-      deletedAt: null,
+      fundSourceId_year_period: {
+        fundSourceId: fundId,
+        year: year,
+        period: targetMonth,
+      },
     },
+    select: { startingBalance: true },
   });
 
   const totalEntries = Number(entriesAgg._sum.amount || 0);
-  const initialAmount = Number(fundsAgg._sum.initialBalance || 0);
+  const initialAmount = Number(ledger?.startingBalance || 0);
 
   return totalEntries + initialAmount;
 };
