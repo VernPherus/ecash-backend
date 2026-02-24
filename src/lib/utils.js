@@ -9,8 +9,8 @@ export const generateToken = (userId, res) => {
   res.cookie("jwt", token, {
     maxAge: 7 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    sameSite: isDev ? "lax" : "strict",
-    secure: !isDev,
+    sameSite: "lax",  // lax works for HTTP; strict would also work but lax is safe
+    secure: false,    // must be false for plain HTTP (no HTTPS on this deployment)
   });
 
   return token;

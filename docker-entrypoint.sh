@@ -6,5 +6,8 @@ echo "Running Prisma migrations..."
 # DATABASE_URL is still required as an environment variable at runtime
 node_modules/.bin/prisma migrate deploy --schema=prisma/schema.prisma
 
+echo "Running database seed..."
+node_modules/.bin/prisma db seed
+
 echo "Starting server..."
 exec node src/index.js

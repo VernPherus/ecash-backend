@@ -27,7 +27,18 @@ const __dirname = path.resolve();
 //* CORS Configuration - Allow frontend to communicate with backend
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: (origin, callback) => {
+      // In development, restrict to known dev origins
+      if (process.env.NODE_ENV !== "production") {
+        const allowed = ["http://localhost:5173", "http://127.0.0.1:5173"];
+        if (!origin || allowed.includes(origin)) return callback(null, true);
+        return callback(new Error("Not allowed by CORS"));
+      }
+      // In production, nginx proxies /api/* so the browser request is
+      // same-origin. Reflect whatever origin is sent (or allow no-origin
+      // requests from same-origin / server-to-server calls).
+      return callback(null, true);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -56,7 +67,7 @@ initScheduler();
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../ecash-frontend/dist")));
 
-  app.get("*", (req, res) => {
+  app.get("/{*splat}", (req, res) => {
     res.sendFile(
       path.join(__dirname, "../ecash-frontend", "dist", "index.html"),
     );
